@@ -10,7 +10,7 @@ import { useFitScale } from "../shared/useFitScale";
 import * as sound from "../shared/sound/soundEngine";
 // import { CelebrationGifOverlay } from "./CelebrationGifOverlay";
 
-const DEFAULT_BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 30];
+const DEFAULT_BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 35];
 const WIN_GLOW_MIN_DISPLAY_MS = 2000;
 const BG_MUSIC_URL = "/Sound/mfcc-lottery-casino-pause-intro-background-music-120443.mp3";
 const BG_GIF_URL = "/symbols/5xRewind/bg.gif";
