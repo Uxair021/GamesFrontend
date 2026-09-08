@@ -1,0 +1,126 @@
+.free-spin-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: pointer;
+  overflow: hidden;
+  animation: free-spin-celebration-fade-in 0.25s ease-out;
+}
+
+.free-spin-celebration--dismissing {
+  animation: free-spin-celebration-fade-out 0.3s ease-in forwards;
+}
+
+@keyframes free-spin-celebration-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes free-spin-celebration-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* On mobile-landscape (see useFitScale), shrinks the whole card via a plain
+   scale() so it fits the short viewport instead of overflowing — see
+   WinCelebration.css for why this wraps the content rather than scaling it
+   directly. Desktop is unaffected (scale stays 1). */
+.free-spin-celebration-fit {
+  transform-origin: center center;
+}
+
+.free-spin-celebration-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transform-origin: center center;
+  animation: free-spin-celebration-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes free-spin-celebration-pop {
+  0% { transform: scale(0) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(1.08) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.free-spin-celebration-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  filter: blur(50px);
+  z-index: -1;
+  background: radial-gradient(circle, rgba(255, 179, 0, 0.55), rgba(255, 224, 102, 0.3) 60%, transparent 75%);
+  animation: free-spin-celebration-glow-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes free-spin-celebration-glow-pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+.free-spin-celebration-title-image {
+  display: block;
+  width: min(420px, 76vw);
+  height: auto;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
+  animation: free-spin-celebration-shake 0.4s ease-in-out infinite;
+}
+
+@keyframes free-spin-celebration-shake {
+  0%, 100% { transform: rotate(-1deg) scale(1); }
+  50% { transform: rotate(1deg) scale(1.02); }
+}
+
+.free-spin-celebration-count {
+  font-weight: 800;
+  font-size: 40px;
+  color: #ffe066;
+  text-shadow: 0 0 14px rgba(255, 224, 102, 0.7);
+  margin-top: -20px;
+  background-color: rgba(0, 0, 0, 0.52);
+  padding: 16px 36px;
+  border-radius: 30px;
+  letter-spacing: 0.04em;
+}
+
+.free-spin-celebration-hint {
+  margin-top: 20px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.free-spin-celebration-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.free-spin-celebration-particle {
+  position: absolute;
+  top: -20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  animation-name: free-spin-celebration-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+
+@keyframes free-spin-celebration-fall {
+  0% { top: -20px; opacity: 1; }
+  100% { top: 100%; opacity: 0.2; }
+}

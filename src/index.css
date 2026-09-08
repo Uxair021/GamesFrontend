@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Crazy 777's paytable ladder LCD readouts only — see games/Crazy777/pixi/Crazy777Scene.ts. */
+@font-face {
+  font-family: "Digital-7";
+  src: url("/fonts/digital-7 (mono).ttf") format("truetype");
+  font-display: swap;
+  font-style: italic;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #020617;
+  color: #f1f5f9;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
