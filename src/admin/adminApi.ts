@@ -116,6 +116,11 @@ export type TierKey =
   | "doubleDollarPlus"
   | "respin"
   | "specialEmpty"
+  // 7 Crystal Clover only — the MULTIPLIER_2X roll, stored in `specialReelTiers`, independent
+  // from `tiers`. Reuses "multiplier2x"/"specialEmpty" above (specialEmpty = "no multiplier
+  // this spin") — only these 2 are new.
+  | "multiplier4x"
+  | "multiplier8x"
   // 5x Rewind only — line tiers (stored in `tiers`, same as every other game): loss + each
   // exact 3-of-a-kind + the 3 "ANY-3 mixed" categories.
   | "whiteBar"
@@ -146,7 +151,61 @@ export type TierKey =
   | "DOUBLE_BAR"
   | "TRIPLE_BAR"
   | "WILD_2X"
-  | "BONUS";
+  | "BONUS"
+  // Vestigial — 7 Crystal Clover's old per-cell-weight tier model used these 3 as `tiers[].key`
+  // (reusing "BAR"/"DOUBLE_BAR"/"TRIPLE_BAR" above) before it moved to the same outcome-first
+  // loss/simpleWin/bigWin/megaWin/jackpot shape every other game uses (see
+  // backEnd/src/games/CrystalClover/engine.ts's doc comment) — kept in the union only so
+  // TIER_LABELS/TIER_IMAGES below don't need every game's map to drop these keys too.
+  | "SEVEN_CLOVER"
+  | "WILD"
+  | "MULTIPLIER_2X"
+  // 777 Fruity only — one row per payout symbol (stored in `tiers`, same "exact 3-of-a-kind"
+  // pattern as Buffalo 777), plus reuses "freeSpin"/"loss" above for the Bonus feature.
+  | "apple"
+  | "lemon"
+  | "orange"
+  | "peach"
+  | "pineapple"
+  | "grape"
+  | "watermelon"
+  | "dragonFruit"
+  | "seven"
+  | "bar"
+  | "star"
+  // Mega 10X Pay only — reuses "loss"/"seven"/"sevenBar"/"singleBar"/"doubleBar"/"tripleBar"
+  // above; these are the new ones (see backEnd/src/games/Mega10XPay/config.ts).
+  | "tenX"
+  | "threeX"
+  | "cherry"
+  | "any3SevenSevenBar"
+  | "any3SingleBarSevenBar"
+  | "any3BarFamilyMix"
+  | "twoCherry"
+  | "oneCherry"
+  // Vegas Hits only — one row per reel symbol (stored in `tiers`), same "reel-strip weight
+  // table" shape as Sizzling 7s. Reuses "RED_7"/"BLUE_7" (Sizzling 7s), "WILD" (Crystal
+  // Clover), and "BONUS" (Sizzling 7s) above — only these 3 are new: the game's 3 flagship
+  // green-7 tiers. See backEnd/src/games/VegasHits/config.ts.
+  | "GREEN_7"
+  | "DOUBLE_GREEN_7"
+  | "TRIPLE_GREEN_7"
+  // Life of Luxury only — one row per reel symbol (stored in `tiers`), same "reel-strip weight
+  // table" shape as Vegas Hits. Reuses "WILD" (Crystal Clover/Vegas Hits) above for its own
+  // substituting wild, restricted to reels 2-4 — see WILD_ALLOWED_REELS. Every row's
+  // payoutMultiplier stays unused/null — with 5 reels a single number can't represent a symbol's
+  // 3/4/5-of-a-kind payouts, so those live in `symbolPayouts` instead, and COIN's own scatter
+  // payout/free-spins live in `scatterRules`. See backEnd/src/games/LifeOfLuxury/config.ts.
+  | "AEROPLANE"
+  | "BOAT"
+  | "CAR"
+  | "RING"
+  | "MONEY"
+  | "WATCH"
+  | "GOLD_BAR"
+  | "SILVER_BAR"
+  | "BRONZE_BAR"
+  | "COIN";
 
 export interface TierRow {
   key: TierKey;
@@ -175,6 +234,10 @@ export type CelebrationTier = "BIG WIN" | "MEGA WIN" | "JACKPOT";
 export interface PaytableConfig {
   gameId: string;
   targetRtpPercent: number;
+  /** Sizzling 7s and Vegas Hits only — target for the % of base spins that pay nothing at all
+   * (see computeSizzlingSevensStats/solveSizzlingSevensLossPercent and
+   * computeVegasHitsStats/solveVegasHitsLossPercent below). null for every other game. */
+  targetLossPercent: number | null;
   /** ShamrockSpin only — bonus spins awarded when the "freeSpin" tier rolls. */
   freeSpinsGranted: number | null;
   tiers: TierRow[];
@@ -190,6 +253,17 @@ export interface PaytableConfig {
   specialReelTiers: TierRow[] | null;
   /** Crazy 777 only — bounds for the RESPIN special-reel feature. */
   respinRange: { min: number; max: number } | null;
+  /** Crystal Clover and Vegas Hits only — chance (0-100) a reel rolls its "1 symbol on the
+   * center payline" state instead of "2 symbols on top+bottom". */
+  reelStateConfig: { centerRowChancePercent: number } | null;
+  /** Vegas Hits only — see games/VegasHits/config.ts's WildRules doc comment. */
+  wildRules: VhWildRules | null;
+  /** Life of Luxury only — each regular symbol's own 3/4/5-of-a-kind line payout (multiple of
+   * line bet), keyed by symbol name. See backEnd/src/games/LifeOfLuxury/config.ts. */
+  symbolPayouts: Record<string, { x3: number; x4: number; x5: number }> | null;
+  /** Life of Luxury only — the COIN scatter's own independent per-cell chance, payout (multiple
+   * of bet), and the free spins it awards on a base-spin 3+ (no retriggering). */
+  scatterRules: { chancePercent: number; x3: number; x4: number; x5: number; freeSpinsAwarded: number } | null;
 }
 
 /** Crazy 777 only — mirrors crazy777FinalWinPerBet in the backend. */
@@ -410,15 +484,33 @@ type SizzSymbol = (typeof SIZZ_SYMBOLS)[number];
 const SIZZ_WILD: SizzSymbol = "WILD_2X";
 const SIZZ_BONUS: SizzSymbol = "BONUS";
 const SIZZ_WILD_SUB = new Set<SizzSymbol>(["RED_7", "BLUE_7", "BAR", "DOUBLE_BAR", "TRIPLE_BAR"]);
+const SIZZ_BAR_FAMILY: SizzSymbol[] = ["BAR", "DOUBLE_BAR", "TRIPLE_BAR"];
+/** A payline where every symbol is a mix of SIZZ_BAR_FAMILY (not necessarily identical — Wild
+ * substitutes in same as everywhere else) still wins, just at this flat rate rather than one of
+ * the 3 higher exact-match BAR payouts above (see sizzEvaluateLine's candidateC). */
+const SIZZ_ANY_BAR_SET = new Set<SizzSymbol>([...SIZZ_BAR_FAMILY, "WILD_2X"]);
+const SIZZ_ANY_BAR_PAYOUT = 5;
+/** Mirrors backend config.ts's DEFAULT_PAYTABLE — see its comment for why these are ~17.1x down
+ * from the originally-requested round numbers (RED_7=250, BLUE_7=100, TRIPLE_BAR=50,
+ * DOUBLE_BAR=30, BAR=25, BONUS=60): that scale floors out around ~725% RTP no matter how
+ * weights are tuned, given this board's 27 fully-overlapping paylines plus the ANY_BAR rule. */
 const SIZZ_DEFAULT_PAYTABLE: Record<Exclude<SizzSymbol, "WILD_2X">, number> = {
-  RED_7: 250,
-  BLUE_7: 100,
-  TRIPLE_BAR: 50,
-  DOUBLE_BAR: 30,
-  BAR: 25,
-  BONUS: 60,
+  RED_7: 14.1946,
+  BLUE_7: 5.6779,
+  TRIPLE_BAR: 2.8389,
+  DOUBLE_BAR: 1.7034,
+  BAR: 1.4195,
+  BONUS: 3.4067,
 };
-const SIZZ_PURE_WILD_DEFAULT: Record<1 | 2 | 3, number> = { 1: 2, 2: 20, 3: 2500 };
+const SIZZ_PURE_WILD_DEFAULT: Record<1 | 2 | 3, number> = { 1: 0.1163, 2: 0.4653, 3: 0.5678 };
+/** A real spin's finalWin = basePayout * wildMultiplier * betMultiplier, where betMultiplier =
+ * totalBet / LINE_COST (see games/SizzlingSevens/routes.ts) — betMultiplier is NOT the same
+ * number as totalBet, they differ by exactly this factor. sizzCalculateSpinWin below computes
+ * everything as if betMultiplier were fixed at 1 (no bet-scaling parameter at all), so
+ * computeSizzlingSevensStats has to divide by LINE_COST itself to get the return for a genuine
+ * 1-unit bet — omitting that previously over-reported RTP by exactly this factor (confirmed
+ * against live spins). */
+const SIZZ_LINE_COST = 30;
 const SIZZ_WILD_MULT_BASE = 2;
 const SIZZ_BONUS_TRIGGER_COUNT = 3;
 const SIZZ_PAYLINES: [number, number, number][] = [
@@ -489,7 +581,9 @@ function sizzEvaluateLine(
     candidateB = pureWild[capped];
   }
 
-  return Math.max(candidateA, candidateB);
+  const candidateC = symbols.every((s) => SIZZ_ANY_BAR_SET.has(s)) ? SIZZ_ANY_BAR_PAYOUT : 0;
+
+  return Math.max(candidateA, candidateB, candidateC);
 }
 
 function sizzCalculateSpinWin(grid: SizzGrid, paytable: SizzPaytable, pureWild: SizzPureWild, freeMultiplier: number) {
@@ -544,6 +638,14 @@ function sizzTriggerFreeGames(rng: () => number): { freeSpins: number; multiplie
 }
 
 const SIZZ_SIMS = 200_000;
+/** Lower-fidelity sim count used only while *searching* for a gamma that hits a requested
+ * target (see solveSizzlingSevensLossPercent/solveSizzlingSevensRtpPercent below) — each search
+ * needs several to a dozen-plus simulation passes, and running those at the full 200k count
+ * would freeze the browser for several seconds. The final tiers those solvers return are always
+ * re-checked at full SIZZ_SIMS fidelity by the caller's own live "Effective RTP/Loss" readout
+ * (a plain computeSizzlingSevensStats(config) call, no override), so search-time precision only
+ * needs to be good enough to land within the admin page's tolerance, not exact. */
+const SIZZ_SEARCH_SIMS = 15_000;
 const SIZZ_MAX_FREE_SPINS = 500;
 
 export interface SizzlingSevensStats {
@@ -557,8 +659,10 @@ export interface SizzlingSevensStats {
 /** Sizzling 7s' RTP and loss frequency can't be exactly enumerated (3 reels x 3 rows x 27
  * overlapping lines x Wild/Bonus/Free-Games is combinatorially far too large) — estimated via
  * a fixed-seed Monte Carlo simulation instead, mirroring the backend's
- * computeSizzlingSevensStats exactly so both sides always agree. */
-export function computeSizzlingSevensStats(config: PaytableConfig): SizzlingSevensStats {
+ * computeSizzlingSevensStats exactly so both sides always agree. `sims` defaults to the full
+ * SIZZ_SIMS (what's shown/validated) — pass SIZZ_SEARCH_SIMS explicitly for a cheaper estimate
+ * while iterating toward a target (see the solvers below). */
+export function computeSizzlingSevensStats(config: PaytableConfig, sims: number = SIZZ_SIMS): SizzlingSevensStats {
   const paytable: SizzPaytable = { ...SIZZ_DEFAULT_PAYTABLE };
   for (const tier of config.tiers) {
     if (tier.key === SIZZ_WILD || tier.payoutMultiplier === null) continue;
@@ -570,7 +674,7 @@ export function computeSizzlingSevensStats(config: PaytableConfig): SizzlingSeve
   const rng = sizzMulberry32(0xc0ffee);
   let total = 0;
   let lossCount = 0;
-  for (let i = 0; i < SIZZ_SIMS; i++) {
+  for (let i = 0; i < sims; i++) {
     const grid = sizzDrawGrid(config.tiers, rng);
     const ev = sizzCalculateSpinWin(grid, paytable, pureWild, 1);
     total += ev.finalWin;
@@ -596,11 +700,466 @@ export function computeSizzlingSevensStats(config: PaytableConfig): SizzlingSeve
       }
     }
   }
-  return { rtpPercent: (total / SIZZ_SIMS) * 100, lossPercent: (lossCount / SIZZ_SIMS) * 100 };
+  return { rtpPercent: (total / SIZZ_LINE_COST / sims) * 100, lossPercent: (lossCount / sims) * 100 };
+}
+
+/** Reshapes all 7 symbol weights via a single power-law exponent, renormalized back to sum to
+ * 100 — gamma > 1 concentrates weight further onto whichever symbols already have the most
+ * (pushes loss% down, verified monotonic in that direction down toward 0); gamma < 1 flattens
+ * the distribution toward uniform. Payout multipliers are left untouched. */
+function sizzReweightByGamma(tiers: TierRow[], gamma: number): TierRow[] {
+  const total = tiers.reduce((sum, t) => sum + Math.pow(t.frequencyPercent, gamma), 0);
+  return tiers.map((t) => ({ ...t, frequencyPercent: (Math.pow(t.frequencyPercent, gamma) / total) * 100 }));
+}
+
+/** A wide log-spaced sweep of gamma (see sizzReweightByGamma), roughly 0.005 to 200 — covers
+ * both "flatten toward uniform" and "concentrate further" without needing to know in advance
+ * which direction a target sits in, since both RTP and loss% move non-monotonically with gamma
+ * (each has its own interior extreme point, verified empirically — RTP dips to a minimum around
+ * gamma≈1-2 then rises both directions away from it; loss% peaks around gamma≈0.75 then falls
+ * both directions). A plain "assume monotonic, bisect" search would silently pick the wrong
+ * branch depending on which side of that extreme the target falls on. */
+const SIZZ_GAMMA_GRID: number[] = (() => {
+  const points: number[] = [];
+  const steps = 28;
+  const logMin = Math.log(0.005);
+  const logMax = Math.log(200);
+  for (let i = 0; i <= steps; i++) points.push(Math.exp(logMin + ((logMax - logMin) * i) / steps));
+  return points;
+})();
+
+/** Finds the gamma (see sizzReweightByGamma) whose resulting weights get `evaluate` closest to
+ * `target`, via a coarse log-spaced grid pass followed by a local refine around the best point.
+ * Shared by both solvers below — weights are the only thing either one ever touches, payout
+ * multipliers stay exactly as the admin set them. */
+function sizzSearchGamma(config: PaytableConfig, evaluate: (c: PaytableConfig) => number, target: number): TierRow[] {
+  let bestGamma = 1;
+  let bestDiff = Infinity;
+  for (const gamma of SIZZ_GAMMA_GRID) {
+    const diff = Math.abs(evaluate({ ...config, tiers: sizzReweightByGamma(config.tiers, gamma) }) - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestGamma = gamma;
+    }
+  }
+  for (const factor of [0.7, 0.85, 1.18, 1.4]) {
+    const gamma = bestGamma * factor;
+    const diff = Math.abs(evaluate({ ...config, tiers: sizzReweightByGamma(config.tiers, gamma) }) - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestGamma = gamma;
+    }
+  }
+  return sizzReweightByGamma(config.tiers, bestGamma);
+}
+
+/**
+ * Finds a reweighting of Sizzling 7s' 7 symbol weights (see sizzReweightByGamma) that gets the
+ * computed loss% close to `targetLossPercent`, leaving every payoutMultiplier untouched — the
+ * admin's payout table is fixed, deliberate input, never something this page rescales on its
+ * own. Effective RTP shifts as a side effect (weights drive both stats at once) and is left for
+ * the admin to re-set afterward via Target RTP % if they want it back — see
+ * solveSizzlingSevensRtpPercent, which searches the very same weight space for the opposite
+ * target.
+ *
+ * Sizzling 7s' 27-fully-overlapping-payline structure (every possible 3-row combination across
+ * the 3x3 grid is a live line) puts a hard structural ceiling on how loss-heavy this game can
+ * ever be for a given payout table — confirmed empirically across several different reweighting
+ * families. A target beyond what's achievable lands as close as the search can get, not at the
+ * literal number requested; the caller's own full-fidelity "Effective Loss" readout after
+ * calling this is the real source of truth for whether it actually landed close enough.
+ */
+export function solveSizzlingSevensLossPercent(config: PaytableConfig, targetLossPercent: number): TierRow[] {
+  return sizzSearchGamma(config, (c) => computeSizzlingSevensStats(c, SIZZ_SEARCH_SIMS).lossPercent, targetLossPercent);
+}
+
+/**
+ * Finds a reweighting of Sizzling 7s' 7 symbol weights that gets the computed RTP close to
+ * `targetRtpPercent`, leaving every payoutMultiplier untouched (see solveSizzlingSevensLossPercent's
+ * doc comment — same principle, same search, opposite target). Unlike every other game, Sizzling
+ * 7s has no dedicated "loss" tier for a plain proportional-frequency rescale to absorb slack
+ * into (every one of its 7 rows is a real, always-drawn symbol, and scaling all of them by the
+ * same factor is a no-op for RTP — the weighted draw only cares about *relative* weight — while
+ * also breaking the "frequencies sum to 100%" invariant), so this reshapes the *distribution*
+ * (gamma) instead of naively scaling it.
+ *
+ * A large payout on even one symbol can put a real, high floor under how low RTP can go no
+ * matter how its weight is reduced — every one of the 27 (fully overlapping) paylines gets an
+ * independent shot at drawing that symbol on any given spin, and 3x3=9 cells is too small a
+ * board for "make it very rare" to fully offset "27 chances to hit it anyway." If the target is
+ * below that floor, this search lands on the lowest-RTP weighting it can find, not the literal
+ * target — the caller's own full-fidelity "Effective RTP" readout is what actually tells you
+ * whether it landed close enough.
+ */
+export function solveSizzlingSevensRtpPercent(config: PaytableConfig, targetRtpPercent: number): TierRow[] {
+  return sizzSearchGamma(config, (c) => computeSizzlingSevensStats(c, SIZZ_SEARCH_SIMS).rtpPercent, targetRtpPercent);
 }
 
 function computeSizzlingSevensRtpPercent(config: PaytableConfig): number {
   return computeSizzlingSevensStats(config).rtpPercent;
+}
+
+/** Vegas Hits only — mirrors games/VegasHits/{config,winCalc}.ts. Duplicated here (not
+ * imported) since this file has no build-time link to the backend package — same convention
+ * every other per-game RTP mirror in this file already follows. */
+const VH_SYMBOLS = ["GREEN_7", "DOUBLE_GREEN_7", "TRIPLE_GREEN_7", "RED_7", "BLUE_7", "WILD", "BONUS"] as const;
+type VhSymbol = (typeof VH_SYMBOLS)[number];
+const VH_WILD: VhSymbol = "WILD";
+const VH_BONUS: VhSymbol = "BONUS";
+const VH_WILD_SUB = new Set<VhSymbol>(["GREEN_7", "DOUBLE_GREEN_7", "TRIPLE_GREEN_7", "RED_7", "BLUE_7"]);
+/** Mirrors games/VegasHits/config.ts's DEFAULT_PAYTABLE — scaled ~0.235x down from the spec's
+ * originally-requested round numbers (100/50/20/12/15), see that file's comment for why. */
+const VH_DEFAULT_PAYTABLE: Record<Exclude<VhSymbol, "WILD" | "BONUS">, number> = {
+  TRIPLE_GREEN_7: 23.5 * 30,
+  DOUBLE_GREEN_7: 11.75 * 30,
+  GREEN_7: 4.7 * 30,
+  RED_7: 2.82 * 30,
+  BLUE_7: 3.525 * 30,
+};
+/** Mirrors games/VegasHits/config.ts's DEFAULT_WILD_RULES. */
+export interface VhWildRules {
+  onePureBet: number;
+  twoPureBet: number;
+  threePureBet: number;
+  oneCompleteMultiplier: number;
+  twoCompleteMultiplier: number;
+  anyMixBet: number;
+}
+/** Exported so AdminRtpPage.tsx can backfill a saved config whose document predates this field
+ * (still `null` from the DB) into something immediately editable, instead of just hiding the
+ * whole Wild Rules panel — same "GET response is never null for a field this game actually
+ * uses" guarantee every other per-game admin panel here relies on. */
+export const VH_DEFAULT_WILD_RULES: VhWildRules = {
+  onePureBet: 0.47 * 30,
+  twoPureBet: 1.41 * 30,
+  threePureBet: 117.5 * 30,
+  oneCompleteMultiplier: 3,
+  twoCompleteMultiplier: 6,
+  anyMixBet: 0.705 * 30,
+};
+const VH_LINE_COST = 30;
+const VH_BONUS_TRIGGER_COUNT = 3;
+const VH_SCATTER_PAYOUT_MULTIPLE_OF_BET = 1;
+const VH_FREE_SPINS_PER_TRIGGER = 7;
+const VH_MAX_TOTAL_FREE_SPINS = 700;
+const VH_CHILI_POOL = [2, 3, 4, 5, 6, 7];
+const VH_PAYLINES: [number, number, number][] = [
+  [1, 1, 1],
+  [0, 0, 0],
+  [2, 2, 2],
+  [0, 1, 2],
+  [2, 1, 0],
+];
+
+type VhPaytable = Record<Exclude<VhSymbol, "WILD" | "BONUS">, number>;
+/** `null` means that reel has no symbol on this row — every reel shows either 1 symbol on the
+ * middle row or 2 on the top+bottom rows, never all 3 (same 2-state shape as 7 Crystal Clover —
+ * see games/VegasHits/engine.ts's rollReelState). */
+type VhGrid = (VhSymbol | null)[][];
+
+/** A payline is exactly 3 stops. Up to 3 candidates, highest wins — mirrors
+ * games/VegasHits/winCalc.ts's evaluatePayline exactly: A) Wild(s) complete an actual matching
+ * real symbol (that symbol's payout x1/oneCompleteMultiplier/twoCompleteMultiplier); B) a
+ * "pure" Wild count (1/2/3 Wilds present) — a flat payout regardless of the rest of the line;
+ * C) 0 Wilds, but the 3 real symbols don't all match — a flat anyMixBet. Returns
+ * [finalWin, involvesWild]. */
+function vhEvaluateLine(grid: VhGrid, line: [number, number, number], paytable: VhPaytable, wildRules: VhWildRules): [number, boolean] {
+  const rawSymbols = line.map((row, reel) => grid[reel][row]);
+  if (rawSymbols.some((s) => s === null || s === VH_BONUS)) return [0, false];
+  const symbols = rawSymbols as VhSymbol[];
+
+  const nonWild = symbols.filter((s) => s !== VH_WILD);
+  const wildCount = symbols.length - nonWild.length;
+
+  let candidateA: number | null = null;
+  if (nonWild.length > 0 && nonWild.every((s) => s === nonWild[0]) && VH_WILD_SUB.has(nonWild[0])) {
+    const mult = wildCount === 0 ? 1 : wildCount === 1 ? wildRules.oneCompleteMultiplier : wildRules.twoCompleteMultiplier;
+    candidateA = paytable[nonWild[0] as Exclude<VhSymbol, "WILD" | "BONUS">] * mult;
+  }
+
+  const candidateB: number | null =
+    wildCount === 1 ? wildRules.onePureBet : wildCount === 2 ? wildRules.twoPureBet : wildCount === 3 ? wildRules.threePureBet : null;
+
+  const candidateC: number | null = wildCount === 0 && nonWild.length > 0 && !nonWild.every((s) => s === nonWild[0]) ? wildRules.anyMixBet : null;
+
+  const candidates = [candidateA, candidateB, candidateC].filter((c): c is number => c !== null);
+  if (candidates.length === 0) return [0, false];
+  return [Math.max(...candidates), wildCount > 0];
+}
+
+/** Chili Multiplier scales every win except one a Wild substituted into (see
+ * games/VegasHits/winCalc.ts's calculateSpinWin) — `chiliMultiplier` is 1 for a base spin. */
+function vhCalculateSpinWin(
+  grid: VhGrid,
+  paytable: VhPaytable,
+  wildRules: VhWildRules,
+  chiliMultiplier: number,
+  totalBetUnits: number
+): { finalWin: number; triggeredFreeGames: boolean } {
+  let nonWildTotal = 0;
+  let wildTotal = 0;
+  for (const line of VH_PAYLINES) {
+    const [win, involvesWild] = vhEvaluateLine(grid, line, paytable, wildRules);
+    if (involvesWild) wildTotal += win;
+    else nonWildTotal += win;
+  }
+
+  let scatterCount = 0;
+  for (const col of grid) for (const s of col) if (s === VH_BONUS) scatterCount++;
+  const scatterWin = scatterCount >= VH_BONUS_TRIGGER_COUNT ? VH_SCATTER_PAYOUT_MULTIPLE_OF_BET * totalBetUnits : 0;
+
+  const finalWin = (nonWildTotal + scatterWin) * chiliMultiplier + wildTotal;
+  return { finalWin, triggeredFreeGames: scatterCount >= VH_BONUS_TRIGGER_COUNT };
+}
+
+function vhWeightedSymbol(tiers: TierRow[], rng: () => number): VhSymbol {
+  const total = tiers.reduce((sum, t) => sum + t.frequencyPercent, 0);
+  let roll = rng() * total;
+  for (const t of tiers) {
+    roll -= t.frequencyPercent;
+    if (roll < 0) return t.key as VhSymbol;
+  }
+  return tiers[tiers.length - 1].key as VhSymbol;
+}
+
+/** Mirrors games/VegasHits/engine.ts's rollReelState exactly — each reel independently shows
+ * either 1 symbol on the middle row or 2 on the top+bottom rows, never all 3. */
+function vhDrawGrid(tiers: TierRow[], centerRowChancePercent: number, rng: () => number): VhGrid {
+  const grid: VhGrid = [];
+  for (let reel = 0; reel < 3; reel++) {
+    const col: (VhSymbol | null)[] = [null, null, null];
+    if (rng() * 100 < centerRowChancePercent) {
+      col[1] = vhWeightedSymbol(tiers, rng);
+    } else {
+      col[0] = vhWeightedSymbol(tiers, rng);
+      col[2] = vhWeightedSymbol(tiers, rng);
+    }
+    grid.push(col);
+  }
+  return grid;
+}
+
+function vhPaytableFrom(tiers: TierRow[]): VhPaytable {
+  const paytable: VhPaytable = { ...VH_DEFAULT_PAYTABLE };
+  for (const tier of tiers) {
+    if (tier.key === VH_WILD || tier.key === VH_BONUS || tier.payoutMultiplier === null) continue;
+    if (tier.key in paytable) (paytable as Record<string, number>)[tier.key] = tier.payoutMultiplier;
+  }
+  return paytable;
+}
+
+function vhWildRulesFrom(config: PaytableConfig): VhWildRules {
+  return config.wildRules ?? VH_DEFAULT_WILD_RULES;
+}
+
+const VH_SIMS = 200_000;
+const VH_SEARCH_SIMS = 15_000;
+
+export interface VegasHitsStats {
+  rtpPercent: number;
+  lossPercent: number;
+}
+
+/** Vegas Hits' RTP and loss frequency are estimated via Monte Carlo simulation, mirroring the
+ * backend's computeVegasHitsStats exactly so both sides always agree. `sims` defaults to the
+ * full VH_SIMS (what's shown/validated) — pass VH_SEARCH_SIMS for a cheaper estimate while
+ * iterating toward a target (see the solvers below). */
+export function computeVegasHitsStats(config: PaytableConfig, sims: number = VH_SIMS): VegasHitsStats {
+  const paytable = vhPaytableFrom(config.tiers);
+  const wildRules = vhWildRulesFrom(config);
+  const centerRowChancePercent = config.reelStateConfig?.centerRowChancePercent ?? 50;
+  const rng = sizzMulberry32(0xc0ffee);
+  const totalBetUnits = VH_LINE_COST;
+
+  let total = 0;
+  let lossCount = 0;
+  for (let i = 0; i < sims; i++) {
+    const grid = vhDrawGrid(config.tiers, centerRowChancePercent, rng);
+    const ev = vhCalculateSpinWin(grid, paytable, wildRules, 1, totalBetUnits);
+    total += ev.finalWin;
+    if (ev.finalWin === 0) lossCount++;
+
+    if (ev.triggeredFreeGames) {
+      let remaining = VH_FREE_SPINS_PER_TRIGGER;
+      let totalAwarded = VH_FREE_SPINS_PER_TRIGGER;
+      let played = 0;
+      while (remaining > 0 && totalAwarded <= VH_MAX_TOTAL_FREE_SPINS) {
+        remaining--;
+        played++;
+        const freeGrid = vhDrawGrid(config.tiers, centerRowChancePercent, rng);
+        const chili = VH_CHILI_POOL[Math.floor(rng() * VH_CHILI_POOL.length)];
+        const freeEv = vhCalculateSpinWin(freeGrid, paytable, wildRules, chili, totalBetUnits);
+        total += freeEv.finalWin;
+        if (freeEv.triggeredFreeGames && totalAwarded + VH_FREE_SPINS_PER_TRIGGER <= VH_MAX_TOTAL_FREE_SPINS) {
+          remaining += VH_FREE_SPINS_PER_TRIGGER;
+          totalAwarded += VH_FREE_SPINS_PER_TRIGGER;
+        }
+        if (played > 5000) break; // safety
+      }
+    }
+  }
+  return { rtpPercent: (total / VH_LINE_COST / sims) * 100, lossPercent: (lossCount / sims) * 100 };
+}
+
+/** Reshapes all 7 symbol weights via a single power-law exponent, renormalized back to sum to
+ * 100 — same mechanism as Sizzling 7s' sizzReweightByGamma (Vegas Hits has no dedicated "loss"
+ * tier either: every one of its 7 rows is a real, always-drawn symbol, so a plain proportional
+ * rescale can't absorb slack without breaking the sum-to-100% invariant). */
+function vhReweightByGamma(tiers: TierRow[], gamma: number): TierRow[] {
+  const total = tiers.reduce((sum, t) => sum + Math.pow(t.frequencyPercent, gamma), 0);
+  return tiers.map((t) => ({ ...t, frequencyPercent: (Math.pow(t.frequencyPercent, gamma) / total) * 100 }));
+}
+
+/** Shared by both solvers below — weights are the only thing either one ever touches, payout
+ * multipliers stay exactly as the admin set them. Mirrors Sizzling 7s' sizzSearchGamma exactly. */
+function vhSearchGamma(config: PaytableConfig, evaluate: (c: PaytableConfig) => number, target: number): TierRow[] {
+  let bestGamma = 1;
+  let bestDiff = Infinity;
+  for (const gamma of SIZZ_GAMMA_GRID) {
+    const diff = Math.abs(evaluate({ ...config, tiers: vhReweightByGamma(config.tiers, gamma) }) - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestGamma = gamma;
+    }
+  }
+  for (const factor of [0.7, 0.85, 1.18, 1.4]) {
+    const gamma = bestGamma * factor;
+    const diff = Math.abs(evaluate({ ...config, tiers: vhReweightByGamma(config.tiers, gamma) }) - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestGamma = gamma;
+    }
+  }
+  return vhReweightByGamma(config.tiers, bestGamma);
+}
+
+/**
+ * Finds a reweighting of Vegas Hits' 7 symbol weights that gets the computed RTP close to
+ * `targetRtpPercent`, leaving every payoutMultiplier untouched — same principle/search as
+ * solveSizzlingSevensRtpPercent (see its doc comment). A target beyond what the board can
+ * structurally reach lands as close as the search can get, not at the literal number
+ * requested — the caller's own full-fidelity "Effective RTP" readout is the real source of
+ * truth for whether it landed close enough.
+ */
+export function solveVegasHitsRtpPercent(config: PaytableConfig, targetRtpPercent: number): TierRow[] {
+  return vhSearchGamma(config, (c) => computeVegasHitsStats(c, VH_SEARCH_SIMS).rtpPercent, targetRtpPercent);
+}
+
+/**
+ * Finds a reweighting of Vegas Hits' 7 symbol weights that gets the computed loss% (percent of
+ * base spins that pay nothing at all) close to `targetLossPercent`, leaving every
+ * payoutMultiplier untouched — same principle/search as solveSizzlingSevensLossPercent (see its
+ * doc comment); Vegas Hits has the same "no dedicated loss row to rescale into" structural
+ * constraint Sizzling 7s does (every one of its 7 rows is a real, always-drawn symbol). Effective
+ * RTP shifts as a side effect (weights drive both stats at once) and is left for the admin to
+ * re-set afterward via Target RTP % if they want it back.
+ */
+export function solveVegasHitsLossPercent(config: PaytableConfig, targetLossPercent: number): TierRow[] {
+  return vhSearchGamma(config, (c) => computeVegasHitsStats(c, VH_SEARCH_SIMS).lossPercent, targetLossPercent);
+}
+
+function computeVegasHitsRtpPercent(config: PaytableConfig): number {
+  return computeVegasHitsStats(config).rtpPercent;
+}
+
+/** 7 Crystal Clover only — mirrors the backend's computeCrystalCloverRtpPercent
+ * (services/paytableConfig.ts) exactly. Crystal Clover is outcome-first (see
+ * backEnd/src/games/CrystalClover/engine.ts's doc comment): one discrete tier rolled from
+ * `tiers` (loss/simpleWin/bigWin/megaWin/jackpot), then an independent MULTIPLIER_2X roll from
+ * `specialReelTiers` applied as a flat multiplier on top — both plain weighted rolls over
+ * admin-set frequencies/payouts, so RTP is exact closed-form arithmetic, no simulation needed. */
+function computeCrystalCloverRtpPercent(config: PaytableConfig): number {
+  const baseRtp = config.tiers.reduce((sum, t) => sum + (t.frequencyPercent / 100) * (t.payoutMultiplier ?? 0), 0);
+  const specialTiers = config.specialReelTiers ?? [];
+  const multiplierEV = specialTiers.reduce((sum, t) => sum + (t.frequencyPercent / 100) * (t.payoutMultiplier ?? 1), 0) || 1;
+  return baseRtp * multiplierEV * 100;
+}
+
+/** Mirrors games/LifeOfLuxury/config.ts's REGULAR_SYMBOLS/DEFAULT_SYMBOL_PAYOUTS/
+ * DEFAULT_SCATTER_RULES. Exported so AdminRtpPage.tsx can backfill a saved config whose
+ * document predates these fields (still `null` from the DB) into something immediately
+ * editable. */
+export const LOL_REGULAR_SYMBOLS = [
+  "AEROPLANE",
+  "BOAT",
+  "CAR",
+  "RING",
+  "MONEY",
+  "WATCH",
+  "GOLD_BAR",
+  "SILVER_BAR",
+  "BRONZE_BAR",
+] as const;
+export const LOL_DEFAULT_SYMBOL_PAYOUTS: Record<(typeof LOL_REGULAR_SYMBOLS)[number], { x3: number; x4: number; x5: number }> = {
+  AEROPLANE: { x3: 2.7, x4: 26.97, x5: 269.69 },
+  BOAT: { x3: 1.62, x4: 10.79, x5: 53.94 },
+  CAR: { x3: 1.08, x4: 5.39, x5: 26.97 },
+  RING: { x3: 0.81, x4: 4.05, x5: 10.79 },
+  MONEY: { x3: 0.54, x4: 2.7, x5: 10.79 },
+  WATCH: { x3: 0.54, x4: 1.62, x5: 8.09 },
+  GOLD_BAR: { x3: 0.27, x4: 1.62, x5: 8.09 },
+  SILVER_BAR: { x3: 0.27, x4: 1.08, x5: 6.47 },
+  BRONZE_BAR: { x3: 0.27, x4: 1.08, x5: 5.39 },
+};
+export const LOL_DEFAULT_SCATTER_RULES = { chancePercent: 3, x3: 0.37, x4: 2.79, x5: 18.57, freeSpinsAwarded: 10 };
+const LOL_WILD_SYMBOL = "WILD";
+const LOL_WILD_ALLOWED_REELS: readonly number[] = [1, 2, 3];
+const LOL_REEL_COUNT = 5;
+const LOL_ROW_COUNT = 3;
+const LOL_SCATTER_TRIGGER_COUNT = 3;
+
+function lolNChooseK(n: number, k: number): number {
+  let result = 1;
+  for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
+  return result;
+}
+
+/** Mirrors the backend's computeLifeOfLuxuryRtpPercent (services/paytableConfig.ts) exactly —
+ * closed-form, no simulation. Coin is rolled as its own independent per-cell chance
+ * (scatterRules.chancePercent), NOT a share of `tiers`. WILD IS a share of `tiers` and genuinely
+ * substitutes into a payline run, restricted to reels 2-4 (LOL_WILD_ALLOWED_REELS) — reels 1/5
+ * draw only the 9 real symbols, renormalized to sum to 100% there. Every line pays the full bet
+ * (no per-line split) and every line shares the same reel-index structure, so the total is
+ * LINE_COUNT times one line's own expectation — see the backend function's doc comment for the
+ * full per-position derivation. */
+function computeLifeOfLuxuryRtpPercent(config: PaytableConfig): number {
+  const weightOf = (symbol: string) => config.tiers.find((t) => t.key === symbol)?.frequencyPercent ?? 0;
+  const payoutOf = (symbol: (typeof LOL_REGULAR_SYMBOLS)[number]) => config.symbolPayouts?.[symbol] ?? LOL_DEFAULT_SYMBOL_PAYOUTS[symbol];
+
+  const scatterRules = config.scatterRules ?? LOL_DEFAULT_SCATTER_RULES;
+  const coinChance = scatterRules.chancePercent / 100;
+  const wildWeight = weightOf(LOL_WILD_SYMBOL);
+  const outerDenom = 100 - wildWeight;
+  const isMiddle = (reelIndex: number) => LOL_WILD_ALLOWED_REELS.includes(reelIndex);
+
+  let perLineSum = 0;
+  for (const symbol of LOL_REGULAR_SYMBOLS) {
+    const weight = weightOf(symbol);
+    const pOuter = outerDenom > 0 ? weight / outerDenom : 0;
+    const pMiddle = (weight + wildWeight) / 100;
+    const matchAt = (reelIndex: number) => (1 - coinChance) * (isMiddle(reelIndex) ? pMiddle : pOuter);
+    const m = [0, 1, 2, 3, 4].map(matchAt);
+
+    const payout = payoutOf(symbol);
+    const P3 = m[0] * m[1] * m[2] * (1 - m[3]);
+    const P4 = m[0] * m[1] * m[2] * m[3] * (1 - m[4]);
+    const P5 = m[0] * m[1] * m[2] * m[3] * m[4];
+    perLineSum += P3 * payout.x3 + P4 * payout.x4 + P5 * payout.x5;
+  }
+  const lineRTP = 15 * perLineSum;
+
+  const cellCount = LOL_REEL_COUNT * LOL_ROW_COUNT;
+  let scatterRTP = 0;
+  let triggerProb = 0;
+  for (let k = LOL_SCATTER_TRIGGER_COUNT; k <= cellCount; k++) {
+    const prob = lolNChooseK(cellCount, k) * Math.pow(coinChance, k) * Math.pow(1 - coinChance, cellCount - k);
+    const multiplier = k === 3 ? scatterRules.x3 : k === 4 ? scatterRules.x4 : scatterRules.x5;
+    scatterRTP += prob * multiplier;
+    triggerProb += prob;
+  }
+
+  const freeSpinEV = triggerProb * scatterRules.freeSpinsAwarded * (lineRTP + scatterRTP);
+  return (lineRTP + scatterRTP + freeSpinEV) * 100;
 }
 
 /**
@@ -608,12 +1167,24 @@ function computeSizzlingSevensRtpPercent(config: PaytableConfig): number {
  * admin page can show the effective RTP live, before the admin ever hits Save.
  */
 export function computeRtpPercent(config: PaytableConfig): number {
+  if (config.gameId === "life-of-luxury") {
+    return computeLifeOfLuxuryRtpPercent(config);
+  }
+
   if (config.gameId === "5x-rewind") {
     return computeFiveXRewindRtpPercent(config);
   }
 
   if (config.gameId === "sizzling-7s") {
     return computeSizzlingSevensRtpPercent(config);
+  }
+
+  if (config.gameId === "crystal-clover") {
+    return computeCrystalCloverRtpPercent(config);
+  }
+
+  if (config.gameId === "vegas-hits") {
+    return computeVegasHitsRtpPercent(config);
   }
 
   if (config.specialReelTiers) {

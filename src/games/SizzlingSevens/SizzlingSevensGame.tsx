@@ -10,6 +10,7 @@ import { useFitScale } from "../shared/useFitScale";
 import * as sound from "../shared/sound/soundEngine";
 
 const BG_URL = "/symbols/sizzling7s/bg.png";
+const BG_MUSIC_URL = "/Sound/alex-morgan-chinese-lunar-new-year-music-548625.mp3";
 /** How long an auto-played free spin stays continuously "spinning" before it lands on its own
  * — a normal spin instead lands whenever the player clicks Stop. */
 const FREE_SPIN_AUTO_STOP_MS = 1400;
@@ -25,8 +26,7 @@ export function SizzlingSevensGame() {
 
   const [ready, setReady] = useState(false);
   const [config, setConfig] = useState<SizzlingSevensConfigResponse | null>(null);
-  const [betMultipliers, setBetMultipliers] = useState<number[]>([1, 2, 3, 5, 10]);
-  const [lineCost, setLineCost] = useState(30);
+  const [betLevels, setBetLevels] = useState<number[]>([0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 30]);
   const [betIndex, setBetIndex] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [awaitingStop, setAwaitingStop] = useState(false);
@@ -50,15 +50,14 @@ export function SizzlingSevensGame() {
   const [mysteryReveal, setMysteryReveal] = useState<{ freeSpins: number; multiplierPool: number[] } | null>(null);
   const [freeGamesSummary, setFreeGamesSummary] = useState<{ totalWin: number; totalSpins: number } | null>(null);
 
-  const betMultiplier = betMultipliers[betIndex] ?? betMultipliers[0];
-  const totalBet = lineCost * betMultiplier;
+  const betLevel = betLevels[betIndex] ?? betLevels[0];
+  const totalBet = betLevel;
 
   useEffect(() => {
     getSizzlingSevensConfig()
       .then((c) => {
         setConfig(c);
-        setBetMultipliers(c.betMultipliers);
-        setLineCost(c.lineCost);
+        setBetLevels(c.betLevels);
       })
       .catch(() => {
         /* fall back to defaults already set */
@@ -88,7 +87,7 @@ export function SizzlingSevensGame() {
         }
         appRef.current = app;
         canvasHostRef.current.appendChild(app.canvas);
-        const scene = await SizzlingSevensScene.create(app, config.symbolWeights);
+        const scene = await SizzlingSevensScene.create(app, config.symbolWeights, config.paylines);
         if (cancelled) {
           scene.destroy();
           return;
@@ -99,7 +98,6 @@ export function SizzlingSevensGame() {
 
     return () => {
       cancelled = true;
-      sound.stopReelSpinLoop();
       sound.stopBackgroundMusic();
       sceneRef.current?.destroy();
       sceneRef.current = null;
@@ -186,7 +184,6 @@ export function SizzlingSevensGame() {
     setWinAmount(0);
     setFreeGamesSummary(null);
     sceneRef.current.startSpin();
-    sound.startReelSpinLoop();
     setAwaitingStop(true);
   }, [spinning, totalBet, user]);
 
@@ -196,11 +193,10 @@ export function SizzlingSevensGame() {
     if (!sceneRef.current || !awaitingStop) return;
     setAwaitingStop(false);
     const grid = await sceneRef.current.freezeSpin();
-    sound.playReelStop();
-    sound.stopReelSpinLoop();
+    sound.playDrumBeat();
 
     try {
-      const result = await spinRequest(betMultiplier, grid, false, null);
+      const result = await spinRequest(betLevel, grid, false, null);
       applyResult(
         {
           winAmount: result.winAmount,
@@ -217,7 +213,7 @@ export function SizzlingSevensGame() {
     } finally {
       setSpinning(false);
     }
-  }, [applyResult, awaitingStop, betMultiplier]);
+  }, [applyResult, awaitingStop, betLevel]);
 
   /** One auto-played free spin — starts scrolling, freezes itself after
    * FREE_SPIN_AUTO_STOP_MS (no player Stop click during Free Games), then sends the frozen
@@ -227,15 +223,13 @@ export function SizzlingSevensGame() {
     setSpinning(true);
     setWinAmount(0);
     sceneRef.current.startSpin();
-    sound.startReelSpinLoop();
 
     try {
       await new Promise((r) => window.setTimeout(r, FREE_SPIN_AUTO_STOP_MS));
       const grid = await sceneRef.current.freezeSpin();
-      sound.playReelStop();
-      sound.stopReelSpinLoop();
+      sound.playDrumBeat();
 
-      const result = await spinRequest(betMultipliers[freeGames.lockedBetIndex], grid, true, freeGames.pool);
+      const result = await spinRequest(betLevels[freeGames.lockedBetIndex], grid, true, freeGames.pool);
       applyResult(
         {
           winAmount: result.winAmount,
@@ -247,13 +241,12 @@ export function SizzlingSevensGame() {
         true
       );
     } catch (err) {
-      sound.stopReelSpinLoop();
       setError(err instanceof Error ? err.message : "Free spin failed");
       setFreeGames(null);
     } finally {
       setSpinning(false);
     }
-  }, [applyResult, betMultipliers, freeGames]);
+  }, [applyResult, betLevels, freeGames]);
 
   // Auto-continue the Free Games round until it runs out, same "auto-continue while a bonus
   // round is active" pattern Crazy777 uses for respins.
@@ -270,7 +263,7 @@ export function SizzlingSevensGame() {
 
   const changeBet = (direction: 1 | -1) => {
     if (freeGames) return;
-    setBetIndex((i) => Math.min(Math.max(i + direction, 0), betMultipliers.length - 1));
+    setBetIndex((i) => Math.min(Math.max(i + direction, 0), betLevels.length - 1));
   };
 
   const scaledWidth = CANVAS_WIDTH * fitScale;
@@ -367,12 +360,12 @@ export function SizzlingSevensGame() {
                 <TriangleIcon direction="left" />
               </CtrlButton>
               <div className="flex flex-col items-center leading-tight">
-                <span className="text-md font-bold uppercase tracking-wide text-amber-400">Bet x{betMultiplier}</span>
+                <span className="text-md font-bold uppercase tracking-wide text-amber-400">Bet</span>
                 <span className="text-3xl font-bold text-white">{totalBet.toFixed(2)}</span>
               </div>
               <CtrlButton
                 onClick={() => changeBet(1)}
-                disabled={betIndex === betMultipliers.length - 1 || inFreeGames}
+                disabled={betIndex === betLevels.length - 1 || inFreeGames}
                 ariaLabel="Increase bet"
                 className="h-10 w-10"
               >
@@ -431,10 +424,25 @@ export function SizzlingSevensGame() {
       )}
 
       {showLoadingScreen && (
-        <LoadingScreen title="Sizzling 7s" ready={ready} onDone={() => setShowLoadingScreen(false)} />
+        <LoadingScreen
+          title="Sizzling 7s"
+          ready={ready}
+          onDone={() => {
+            setShowLoadingScreen(false);
+            sound.startBackgroundMusic(BG_MUSIC_URL);
+          }}
+        />
       )}
     </>
   );
+}
+
+/** Server-side payout figures are calibrated relative to LINE_COST (the fixed internal
+ * reference the whole paytable was tuned against — see backend config.ts), not the player's
+ * actual selected bet directly: finalWin = payout x (totalBet / lineCost). This converts a raw
+ * payout into "how many times your actual total bet this pays" for display. */
+function toBetMultiple(payout: number, lineCost: number): string {
+  return (payout / lineCost).toFixed(4);
 }
 
 const SYMBOL_IMAGES: Record<string, string> = {
@@ -467,8 +475,8 @@ function PaytableModal({ config, onClose }: { config: SizzlingSevensConfigRespon
         </div>
 
         <p className="text-sm text-white/90">
-          {config.paylineCount} fixed paylines, {config.lineCost} coin total bet x your selected multiplier. 3+
-          matching symbols left-to-right on a line pays out; the 2X WILD substitutes for every symbol except
+          {config.paylineCount} fixed paylines on every spin. 3+ matching symbols left-to-right on a line pays
+          out (shown below as a multiple of your total bet); the 2X WILD substitutes for every symbol except
           BONUS and multiplies a substituted win by 2 per Wild used (x2/x4/x8). BONUS lands anywhere and doesn't
           need a payline — 3+ anywhere pays a scatter win and triggers Free Games.
         </p>
@@ -487,7 +495,7 @@ function PaytableModal({ config, onClose }: { config: SizzlingSevensConfigRespon
                   <img src={SYMBOL_IMAGES[row.symbol]} alt="" className="h-6 w-6 object-contain" />
                   {row.symbol.replace("_", " ")}
                 </td>
-                <td className="py-1 text-right font-semibold text-lime-300">x{row.payout}</td>
+                <td className="py-1 text-right font-semibold text-lime-300">x{toBetMultiple(row.payout, config.lineCost)}</td>
               </tr>
             ))}
           </tbody>
@@ -496,7 +504,9 @@ function PaytableModal({ config, onClose }: { config: SizzlingSevensConfigRespon
         <div className="mt-4 text-sm">
           <div className="font-bold text-amber-400">2X WILD (pure Wild)</div>
           <div className="text-white/80">
-            1 Wild = x{config.wild.purePayout[1]}, 2 Wilds = x{config.wild.purePayout[2]}, 3 Wilds = x{config.wild.purePayout[3]} (not multiplied further)
+            1 Wild = x{toBetMultiple(config.wild.purePayout[1], config.lineCost)}, 2 Wilds = x
+            {toBetMultiple(config.wild.purePayout[2], config.lineCost)}, 3 Wilds = x
+            {toBetMultiple(config.wild.purePayout[3], config.lineCost)} (not multiplied further)
           </div>
         </div>
 

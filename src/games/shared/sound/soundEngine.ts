@@ -72,23 +72,43 @@ function playSequence(notes: number[], gap: number, duration: number, type: Osci
 }
 
 // --- Reel spin loop (recorded sample, used only while reels are spinning) --
+// Each game can pass its own track (and an optional trim so only a short lead-in segment of a
+// longer recording loops, e.g. Crystal Clover uses just the first 0.4s of its sample) — same
+// per-URL caching pattern as background music below, keyed by url+trim so the same file can be
+// cached both trimmed and untrimmed if different games ever want different slices of it.
 
-const REEL_SPIN_SOUND_URL = "/Sound/mixkit-arcade-slot-machine-wheel-1933.wav";
-let reelSpinBuffer: AudioBuffer | null = null;
-let reelSpinBufferPromise: Promise<AudioBuffer> | null = null;
+const DEFAULT_REEL_SPIN_SOUND_URL = "/Sound/mixkit-arcade-slot-machine-wheel-1933.wav";
+const reelSpinBufferCache = new Map<string, AudioBuffer>();
+const reelSpinBufferPromiseCache = new Map<string, Promise<AudioBuffer>>();
 
-function loadReelSpinBuffer(ctx: AudioContext): Promise<AudioBuffer> {
-  if (reelSpinBuffer) return Promise.resolve(reelSpinBuffer);
-  if (!reelSpinBufferPromise) {
-    reelSpinBufferPromise = fetch(REEL_SPIN_SOUND_URL)
+/** Copies just the first `endSeconds` of `buffer` into a new, shorter AudioBuffer — used to
+ * loop only a lead-in slice of a longer recording instead of the whole file. */
+function trimBuffer(ctx: AudioContext, buffer: AudioBuffer, endSeconds: number): AudioBuffer {
+  const frameCount = Math.max(1, Math.min(buffer.length, Math.round(endSeconds * buffer.sampleRate)));
+  const trimmed = ctx.createBuffer(buffer.numberOfChannels, frameCount, buffer.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    trimmed.copyToChannel(buffer.getChannelData(channel).subarray(0, frameCount), channel);
+  }
+  return trimmed;
+}
+
+function loadReelSpinBuffer(ctx: AudioContext, url: string, trimEndSeconds?: number): Promise<AudioBuffer> {
+  const cacheKey = trimEndSeconds ? `${url}#${trimEndSeconds}` : url;
+  const cached = reelSpinBufferCache.get(cacheKey);
+  if (cached) return Promise.resolve(cached);
+  let promise = reelSpinBufferPromiseCache.get(cacheKey);
+  if (!promise) {
+    promise = fetch(url)
       .then((res) => res.arrayBuffer())
       .then((data) => ctx.decodeAudioData(data))
+      .then((buffer) => (trimEndSeconds ? trimBuffer(ctx, buffer, trimEndSeconds) : buffer))
       .then((buffer) => {
-        reelSpinBuffer = buffer;
+        reelSpinBufferCache.set(cacheKey, buffer);
         return buffer;
       });
+    reelSpinBufferPromiseCache.set(cacheKey, promise);
   }
-  return reelSpinBufferPromise;
+  return promise;
 }
 
 let spinLoopSource: AudioBufferSourceNode | null = null;
@@ -96,13 +116,15 @@ let spinLoopSource: AudioBufferSourceNode | null = null;
 // can't start playback after a newer stop (or a newer start superseded it).
 let spinLoopToken = 0;
 
-export function startReelSpinLoop(): void {
+/** `trimEndSeconds`, if given, loops only the first N seconds of `url` instead of the whole
+ * file — pass a short lead-in slice of a longer recording for a tighter, more rhythmic loop. */
+export function startReelSpinLoop(url: string = DEFAULT_REEL_SPIN_SOUND_URL, trimEndSeconds?: number): void {
   stopReelSpinLoop();
   const token = ++spinLoopToken;
   if (muted) return;
   const ctx = getContext();
 
-  loadReelSpinBuffer(ctx).then((buffer) => {
+  loadReelSpinBuffer(ctx, url, trimEndSeconds).then((buffer) => {
     if (token !== spinLoopToken || muted) return;
 
     const source = ctx.createBufferSource();
@@ -212,6 +234,27 @@ export function playReelStop(): void {
   const t = ctx.currentTime;
   tone(140, t, 0.1, "square", 0.22);
   tone(85, t, 0.16, "sine", 0.18);
+}
+
+/** Synthesized single kick-drum-style hit — a punchier, more "drum beat" feel than the generic
+ * mechanical playReelStop clunk above. A sine oscillator sweeps quickly from a higher pitch down
+ * to a low thump (the classic synthesized-kick technique) under a fast amplitude decay. */
+export function playDrumBeat(): void {
+  if (muted) return;
+  const ctx = getContext();
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(0.7, t + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  osc.connect(gain);
+  gain.connect(masterGain!);
+  osc.start(t);
+  osc.stop(t + 0.25);
 }
 
 /** Small/regular win chime (no celebration tier). */

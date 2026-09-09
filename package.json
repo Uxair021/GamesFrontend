@@ -12,6 +12,7 @@
   "dependencies": {
     "@pixi/gif": "^3.0.1",
     "axios": "^1.7.2",
+    "gsap": "^3.15.0",
     "lucide-react": "^1.31.0",
     "pixi.js": "^8.2.6",
     "react": "^18.3.1",

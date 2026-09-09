@@ -4,7 +4,12 @@ import cashMachineThumbnail from "../../public/symbols/moneyMachine/thumbnail.pn
 import buffalo777Thumbnail from "../../public/symbols/buffalo777/thumbnail.png";
 import crazy777Thumbnail from "../../public/symbols/carzy777/thumnail.png";
 import fivexRewindThumbnail from "../../public/symbols/5xRewind/thumbnail.png";
-import sizzlingThumbnail from "../../public/symbols/sizzling7s/thumbnail.png"
+import sizzlingThumbnail from "../../public/symbols/sizzling7s/thumbnail.png";
+import crystalCloverThumbnail from "../../public/symbols/crystalClover/thumbnail.png";
+import fruity777Thumbnail from "../../public/symbols/fruity777/thumbnail.png";
+import mega10xPayThumbnail from "../../public/symbols/mega10x/thumbnail.png";
+import vegasHitsThumbnail from "../../public/symbols/vegasHit/thumbnail.png";
+import lifeOfLuxuryThumbnail from "../../public/symbols/lifeOfLuxury/thumbnail.svg";
 
 const THUMBNAILS: Record<string, string> = {
   "shamrock-spin": shamrockSpinThumbnail,
@@ -13,6 +18,11 @@ const THUMBNAILS: Record<string, string> = {
   "crazy-777": crazy777Thumbnail,
   "5x-rewind": fivexRewindThumbnail,
   "sizzling-7s": sizzlingThumbnail,
+  "crystal-clover": crystalCloverThumbnail,
+  "fruity-777": fruity777Thumbnail,
+  "mega-10x-pay": mega10xPayThumbnail,
+  "vegas-hits": vegasHitsThumbnail,
+  "life-of-luxury": lifeOfLuxuryThumbnail,
 };
 
 interface GameCardProps {

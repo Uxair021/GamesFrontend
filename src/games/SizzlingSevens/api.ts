@@ -56,7 +56,7 @@ export interface PaytableRow {
 export interface SizzlingSevensConfigResponse {
   meta: { id: string; name: string; description: string; minBet: number; maxBet: number };
   lineCost: number;
-  betMultipliers: number[];
+  betLevels: number[];
   minBet: number;
   maxBet: number;
   paylineCount: number;
@@ -74,16 +74,17 @@ export interface SizzlingSevensConfigResponse {
   };
 }
 
-/** `grid` is what the reel actually froze on (see Reel.freezeInPlace) — the server scores and
+/** `betLevel` is the real total bet (0.10-30 — see config's BET_LEVELS), not a multiplier.
+ * `grid` is what the reel actually froze on (see Reel.stopAndSettle) — the server scores and
  * pays out exactly that grid rather than drawing its own. */
 export async function spinRequest(
-  betMultiplier: number,
+  betLevel: number,
   grid: Grid,
   isFreeSpin: boolean,
   freeGameMultiplierPool: number[] | null
 ): Promise<SpinResponse> {
   const { data } = await apiClient.post<SpinResponse>("/api/games/sizzling-7s/spin", {
-    betMultiplier,
+    betLevel,
     grid,
     isFreeSpin,
     freeGameMultiplierPool,

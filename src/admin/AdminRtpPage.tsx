@@ -1,6 +1,23 @@
 import { useEffect, useState } from "react";
 import { AdminPageHeader } from "./AdminPageHeader";
-import { adminApi, PaytableConfig, TierKey, TierRow, CelebrationTier, computeRtpPercent, computeSizzlingSevensStats } from "./adminApi";
+import {
+  adminApi,
+  PaytableConfig,
+  TierKey,
+  TierRow,
+  CelebrationTier,
+  computeRtpPercent,
+  computeSizzlingSevensStats,
+  solveSizzlingSevensLossPercent,
+  solveSizzlingSevensRtpPercent,
+  computeVegasHitsStats,
+  solveVegasHitsLossPercent,
+  solveVegasHitsRtpPercent,
+  VH_DEFAULT_WILD_RULES,
+  LOL_REGULAR_SYMBOLS,
+  LOL_DEFAULT_SYMBOL_PAYOUTS,
+  LOL_DEFAULT_SCATTER_RULES,
+} from "./adminApi";
 import { gameRegistry } from "../games/registry";
 
 const CELEBRATION_OPTIONS: { value: CelebrationTier | null; label: string }[] = [
@@ -42,6 +59,8 @@ const TIER_LABELS: Record<TierKey, string> = {
   doubleDollarPlus: "Special: $$+",
   respin: "Special: RESPIN",
   specialEmpty: "Special: — (no bonus)",
+  multiplier4x: "Special: 4X",
+  multiplier8x: "Special: 8X",
   whiteBar: "WHITE-BAR x3",
   sevenBar: "7-BAR (WHITE 7-BAR) x3",
   redBar: "RED-BAR x3",
@@ -64,6 +83,41 @@ const TIER_LABELS: Record<TierKey, string> = {
   TRIPLE_BAR: "TRIPLE BAR (weight + 3x pay)",
   WILD_2X: "2X WILD (weight + 3-Wild pay)",
   BONUS: "BONUS (weight + scatter pay)",
+  SEVEN_CLOVER: "7 Crystal Clover (weight + 3x pay)",
+  WILD: "WILD (weight + pure-Wild pay)",
+  MULTIPLIER_2X: "2X Multiplier (weight only)",
+  apple: "3x Apple",
+  lemon: "3x Lemon",
+  orange: "3x Orange",
+  peach: "3x Peach",
+  pineapple: "3x Pineapple",
+  grape: "3x Grape",
+  watermelon: "3x Watermelon",
+  dragonFruit: "3x Dragon Fruit",
+  seven: "3x Seven",
+  bar: "3x Bar",
+  star: "3x Star",
+  tenX: "3x 10X PAY",
+  threeX: "3x 3X PAY",
+  cherry: "3x Cherry",
+  any3SevenSevenBar: "Any 3 (7 / 7-BAR mixed)",
+  any3SingleBarSevenBar: "Any 3 (Single Bar / 7-BAR mixed)",
+  any3BarFamilyMix: "Any 3 (Bar family mixed)",
+  twoCherry: "2x Cherry (on the line)",
+  oneCherry: "1x Cherry (on the line)",
+  GREEN_7: "1 Green 7 (weight + 3x pay)",
+  DOUBLE_GREEN_7: "2 Green 7s (weight + 3x pay)",
+  TRIPLE_GREEN_7: "3 Green 7s (weight + 3x pay)",
+  AEROPLANE: "Aeroplane (weight only)",
+  BOAT: "Boat (weight only)",
+  CAR: "Car (weight only)",
+  RING: "Ring (weight only)",
+  MONEY: "Money (weight only)",
+  WATCH: "Watch (weight only)",
+  GOLD_BAR: "Gold Bar (weight only)",
+  SILVER_BAR: "Silver Bar (weight only)",
+  BRONZE_BAR: "Bronze Bar (weight only)",
+  COIN: "Coin (independent scatter chance)",
 };
 
 const SHAMROCK_RULE_LABELS: Record<string, string> = {
@@ -77,6 +131,31 @@ const SHAMROCK_RULE_LABELS: Record<string, string> = {
   SINGLE_BAR: "3× BAR",
   TWO_WILDS: "2 Wilds + Any",
   ONE_WILD: "1 Wild + Any + Any",
+};
+
+/** 7 Crystal Clover only — which symbol combo cosmetically renders for each rule id (see
+ * backEnd/src/games/CrystalClover/config.ts's WIN_RULE_IDS) — purely decorative, payout comes
+ * from whichever tier the rule is mapped to below, not from the id itself. */
+const CRYSTAL_CLOVER_RULE_LABELS: Record<string, string> = {
+  SEVEN_CLOVER: "3× 7 Crystal Clover",
+  TRIPLE_BAR: "3× TRIPLE BAR",
+  DOUBLE_BAR: "3× DOUBLE BAR",
+  BAR: "3× BAR",
+  ANY_BAR: "Any 3 Bars (mixed)",
+  ONE_WILD: "1 Wild + Any + Any",
+  TWO_WILD: "2 Wilds + Any",
+  THREE_WILD: "3× WILD",
+};
+
+const CRYSTAL_CLOVER_RULE_IMAGES: Record<string, string> = {
+  SEVEN_CLOVER: "/symbols/crystalClover/7clover.png",
+  TRIPLE_BAR: "/symbols/crystalClover/trippleBar.png",
+  DOUBLE_BAR: "/symbols/crystalClover/doubleBar.png",
+  BAR: "/symbols/crystalClover/bar.png",
+  ANY_BAR: "/symbols/crystalClover/bar.png",
+  ONE_WILD: "/symbols/crystalClover/wild.png",
+  TWO_WILD: "/symbols/crystalClover/wild.png",
+  THREE_WILD: "/symbols/crystalClover/wild.png",
 };
 
 /** Buffalo 777 only — the actual reel symbol image for each tier, where one exists 1:1
@@ -124,7 +203,58 @@ const TIER_IMAGES: Partial<Record<TierKey, string>> = {
   TRIPLE_BAR: "/symbols/sizzling7s/bar3.png",
   WILD_2X: "/symbols/sizzling7s/2xWild.png",
   BONUS: "/symbols/sizzling7s/bonus.png",
+  SEVEN_CLOVER: "/symbols/crystalClover/7clover.png",
+  WILD: "/symbols/crystalClover/wild.png",
+  MULTIPLIER_2X: "/symbols/crystalClover/2X.png",
+  GREEN_7: "/symbols/vegasHit/Green7.png",
+  DOUBLE_GREEN_7: "/symbols/vegasHit/DoubleGreen7.png",
+  TRIPLE_GREEN_7: "/symbols/vegasHit/TripleGreen7.png",
+  AEROPLANE: "/symbols/lifeOfLuxury/aeroplane.png",
+  BOAT: "/symbols/lifeOfLuxury/boat.png",
+  CAR: "/symbols/lifeOfLuxury/car.png",
+  RING: "/symbols/lifeOfLuxury/ring.png",
+  MONEY: "/symbols/lifeOfLuxury/money.png",
+  WATCH: "/symbols/lifeOfLuxury/watch.png",
+  GOLD_BAR: "/symbols/lifeOfLuxury/goldBar.png",
+  SILVER_BAR: "/symbols/lifeOfLuxury/silverBar.png",
+  BRONZE_BAR: "/symbols/lifeOfLuxury/bronzeBar.png",
+  COIN: "/symbols/lifeOfLuxury/coin.png",
 };
+
+/** 7 Crystal Clover reuses Sizzling 7s' "BAR"/"DOUBLE_BAR"/"TRIPLE_BAR" tier keys (each game's
+ * `tiers` array is independent — see backend models/PaytableConfig.ts), but the two games have
+ * their own distinct bar artwork, so TIER_IMAGES (a flat, game-agnostic map) can't hold both at
+ * once for the same key. This per-game override wins over TIER_IMAGES when present — see
+ * tierImage() below, used everywhere TIER_IMAGES would otherwise be looked up directly. */
+const GAME_TIER_IMAGE_OVERRIDES: Partial<Record<string, Partial<Record<TierKey, string>>>> = {
+  "crystal-clover": {
+    BAR: "/symbols/crystalClover/bar.png",
+    DOUBLE_BAR: "/symbols/crystalClover/doubleBar.png",
+    TRIPLE_BAR: "/symbols/crystalClover/trippleBar.png",
+    // specialReelTiers (the MULTIPLIER_2X roll) — same icon at every level, the row label
+    // already says which multiplier it is.
+    specialEmpty: "/symbols/crystalClover/2X.png",
+    multiplier2x: "/symbols/crystalClover/2X.png",
+    multiplier4x: "/symbols/crystalClover/2X.png",
+    multiplier8x: "/symbols/crystalClover/2X.png",
+  },
+  // Vegas Hits reuses Sizzling 7s' "RED_7"/"BLUE_7"/"BONUS" and Crystal Clover's "WILD" tier
+  // keys, but has its own distinct artwork for all 4.
+  "vegas-hits": {
+    RED_7: "/symbols/vegasHit/Red7.png",
+    BLUE_7: "/symbols/vegasHit/Blue7.png",
+    WILD: "/symbols/vegasHit/redHot.png",
+    BONUS: "/symbols/vegasHit/Bonus.png",
+  },
+  // Life of Luxury's own wild (daimond.png), distinct from Crystal Clover/Vegas Hits' artwork.
+  "life-of-luxury": {
+    WILD: "/symbols/lifeOfLuxury/daimond.png",
+  },
+};
+
+function tierImage(gameId: string, key: TierKey): string | undefined {
+  return GAME_TIER_IMAGE_OVERRIDES[gameId]?.[key] ?? TIER_IMAGES[key];
+}
 
 /** Shamrock Spin only — the reel symbol image for each win rule. */
 const SHAMROCK_RULE_IMAGES: Record<string, string> = {
@@ -142,6 +272,17 @@ const SHAMROCK_RULE_IMAGES: Record<string, string> = {
 
 const WIN_TIER_KEYS: TierKey[] = ["simpleWin", "bigWin", "megaWin", "jackpot"];
 
+/** Sizzling 7s and Vegas Hits only — both express every payoutMultiplier relative to a fixed
+ * internal LINE_COST reference (see their own backend config.ts), not as a direct bet
+ * multiplier the way every other game's payoutMultiplier is. The "Payout (x bet)" column below
+ * edits that raw internal number as-is (it's what's actually stored), but shows the real
+ * x-bet conversion (payoutMultiplier / LINE_COST) alongside it so it doesn't read as a
+ * multiplier ~30x too large. */
+const LINE_COST_BY_GAME: Partial<Record<string, number>> = {
+  "sizzling-7s": 30,
+  "vegas-hits": 30,
+};
+
 function inputClass(invalid = false): string {
   return `w-24 rounded-lg border bg-slate-950 px-2 py-1.5 text-sm text-white ${
     invalid ? "border-rose-500" : "border-slate-700"
@@ -154,28 +295,70 @@ export function AdminRtpPage() {
   const [saving, setSaving] = useState(false);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [savedOk, setSavedOk] = useState(false);
+  // Sizzling 7s' RTP/loss solvers (see adminApi.ts) run a dozen-plus Monte Carlo passes
+  // synchronously — cheap enough not to need a Web Worker, but slow enough (up to ~1-2s) to
+  // want a visible "Solving..." state rather than just freezing the page with no feedback.
+  const [solving, setSolving] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
     setConfig(null);
     setSaveErrors([]);
     setSavedOk(false);
-    adminApi.getPaytable(gameId).then((res) => setConfig(res.config));
+    adminApi.getPaytable(gameId).then((res) => {
+      // A document saved before wildRules/reelStateConfig existed still has them as `null` from
+      // the DB — the live game itself falls back fine (see games/VegasHits/engine.ts), but this
+      // page's panels for them are gated on the field being non-null, so without this backfill
+      // they'd just silently not render instead of showing editable defaults.
+      const config =
+        gameId === "vegas-hits"
+          ? {
+              ...res.config,
+              wildRules: res.config.wildRules ?? VH_DEFAULT_WILD_RULES,
+              reelStateConfig: res.config.reelStateConfig ?? { centerRowChancePercent: 50 },
+            }
+          : gameId === "life-of-luxury"
+            ? {
+                ...res.config,
+                symbolPayouts: res.config.symbolPayouts ?? LOL_DEFAULT_SYMBOL_PAYOUTS,
+                scatterRules: res.config.scatterRules ?? LOL_DEFAULT_SCATTER_RULES,
+              }
+            : res.config;
+      setConfig(config);
+    });
   }, [gameId]);
 
   const hasFreeSpin = config?.tiers.some((t) => t.key === "freeSpin") ?? false;
-  // Sizzling 7s' RTP and loss% both come from the same (expensive, 200k-sim) Monte Carlo pass
-  // — compute it once here and reuse, rather than calling computeRtpPercent (which would
-  // re-run the whole simulation a second time) separately below.
-  const sizzlingStats = config && gameId === "sizzling-7s" ? computeSizzlingSevensStats(config) : null;
-  const computedRtp = sizzlingStats ? sizzlingStats.rtpPercent : config ? computeRtpPercent(config) : 0;
+  // Sizzling 7s and Vegas Hits both have no dedicated "loss" tier (every row is a real,
+  // always-drawn reel symbol — see their own config.ts comments), so their RTP and loss% both
+  // come from the same (expensive, 200k-sim) Monte Carlo pass — compute it once here and reuse,
+  // rather than calling computeRtpPercent (which would re-run the whole simulation a second
+  // time) separately below.
+  const simStats =
+    config && gameId === "sizzling-7s"
+      ? computeSizzlingSevensStats(config)
+      : config && gameId === "vegas-hits"
+        ? computeVegasHitsStats(config)
+        : null;
+  const computedRtp = simStats ? simStats.rtpPercent : config ? computeRtpPercent(config) : 0;
   const frequencySum = config ? config.tiers.reduce((sum, t) => sum + t.frequencyPercent, 0) : 0;
   const frequencyValid = Math.abs(frequencySum - 100) <= 0.01;
   const rtpValid = config ? Math.abs(computedRtp - config.targetRtpPercent) <= 0.5 : false;
+  // null targetLossPercent means the admin hasn't set one yet (or this doc predates the
+  // feature) — nothing to validate against, so it doesn't block Save, mirroring the backend's
+  // own "null = feature unused" check in validatePaytableConfig.
+  const lossValid =
+    !simStats || config?.targetLossPercent === null || config?.targetLossPercent === undefined
+      ? true
+      : Math.abs(simStats.lossPercent - config.targetLossPercent) <= 1.0;
   const specialFrequencySum = config?.specialReelTiers?.reduce((sum, t) => sum + t.frequencyPercent, 0) ?? 100;
   const specialFrequencyValid = !config?.specialReelTiers || Math.abs(specialFrequencySum - 100) <= 0.01;
-  const isValid = frequencyValid && rtpValid && specialFrequencyValid;
+  const isValid = frequencyValid && rtpValid && lossValid && specialFrequencyValid && !solving;
 
+  // Plain, direct field edit — frequency and payout ("x bet") values are the admin's own fixed
+  // truth and are never auto-touched by anything else on this page. Target RTP %/Target Loss %
+  // are the only fields that trigger an automatic solve (see setTargetRtp/setTargetLoss below),
+  // and for Sizzling 7s that solve only ever reshapes the *weights*, never the payouts.
   function updateTier(key: TierKey, patch: Partial<TierRow>) {
     if (!config) return;
     setSavedOk(false);
@@ -208,6 +391,42 @@ export function AdminRtpPage() {
     setConfig({ ...config, respinRange: { ...config.respinRange, ...patch } });
   }
 
+  function updateReelStateConfig(patch: Partial<{ centerRowChancePercent: number }>) {
+    if (!config?.reelStateConfig) return;
+    setSavedOk(false);
+    setConfig({ ...config, reelStateConfig: { ...config.reelStateConfig, ...patch } });
+  }
+
+  function updateWildRules(
+    patch: Partial<{
+      onePureBet: number;
+      twoPureBet: number;
+      threePureBet: number;
+      oneCompleteMultiplier: number;
+      twoCompleteMultiplier: number;
+      anyMixBet: number;
+    }>
+  ) {
+    if (!config?.wildRules) return;
+    setSavedOk(false);
+    setConfig({ ...config, wildRules: { ...config.wildRules, ...patch } });
+  }
+
+  function updateSymbolPayout(symbol: string, patch: Partial<{ x3: number; x4: number; x5: number }>) {
+    if (!config?.symbolPayouts) return;
+    setSavedOk(false);
+    setConfig({
+      ...config,
+      symbolPayouts: { ...config.symbolPayouts, [symbol]: { ...config.symbolPayouts[symbol], ...patch } },
+    });
+  }
+
+  function updateScatterRules(patch: Partial<{ chancePercent: number; x3: number; x4: number; x5: number; freeSpinsAwarded: number }>) {
+    if (!config?.scatterRules) return;
+    setSavedOk(false);
+    setConfig({ ...config, scatterRules: { ...config.scatterRules, ...patch } });
+  }
+
 
   // Changing the Target RTP re-scales the win-tier frequencies (proportionally, keeping their
   // relative rarity the same) so the config is instantly valid again at the new target — the
@@ -233,6 +452,36 @@ export function AdminRtpPage() {
     if (!config) return;
     setSavedOk(false);
 
+    // Sizzling 7s has no dedicated "loss" tier for rescaleLineTiers' proportional-frequency
+    // rescale to absorb slack into (all 7 rows are real, always-drawn symbols — scaling them all
+    // by the same factor is a no-op for RTP and breaks the sum-to-100% invariant) — reshape the
+    // weight *distribution* instead, via the same gamma search Target Loss % uses, and never
+    // touch payout multipliers (those are the admin's own fixed numbers — see
+    // solveSizzlingSevensRtpPercent's doc comment). Runs a couple dozen Monte Carlo passes, so
+    // defer it a tick behind a "Solving..." state instead of freezing.
+    if (gameId === "sizzling-7s") {
+      setSolving(true);
+      window.setTimeout(() => {
+        const tiers = solveSizzlingSevensRtpPercent(config, newTarget);
+        setConfig({ ...config, targetRtpPercent: newTarget, tiers });
+        setSolving(false);
+      }, 0);
+      return;
+    }
+
+    // Vegas Hits has the same "no dedicated loss tier" structure as Sizzling 7s (every one of
+    // its 7 rows is a real, always-drawn reel symbol) — reshape the weight distribution via the
+    // same gamma search instead of the generic proportional rescale below.
+    if (gameId === "vegas-hits") {
+      setSolving(true);
+      window.setTimeout(() => {
+        const tiers = solveVegasHitsRtpPercent(config, newTarget);
+        setConfig({ ...config, targetRtpPercent: newTarget, tiers });
+        setSolving(false);
+      }, 0);
+      return;
+    }
+
     const oldRtp = computeRtpPercent(config);
     if (!Number.isFinite(oldRtp) || oldRtp <= 0) {
       setConfig({ ...config, targetRtpPercent: newTarget });
@@ -253,6 +502,20 @@ export function AdminRtpPage() {
     }
 
     setConfig({ ...config, targetRtpPercent: newTarget, tiers });
+  }
+
+  // Sizzling 7s only — see solveSizzlingSevensLossPercent's doc comment for the mechanism
+  // (reshapes symbol weights, leaves payouts untouched) and its structural ceiling caveat.
+  function setTargetLoss(newTarget: number) {
+    if (!config) return;
+    setSavedOk(false);
+    setSolving(true);
+    window.setTimeout(() => {
+      const tiers =
+        gameId === "vegas-hits" ? solveVegasHitsLossPercent(config, newTarget) : solveSizzlingSevensLossPercent(config, newTarget);
+      setConfig({ ...config, targetLossPercent: newTarget, tiers });
+      setSolving(false);
+    }, 0);
   }
 
   async function save() {
@@ -280,7 +543,7 @@ export function AdminRtpPage() {
         description="Set exact odds and payouts per outcome tier — this is the RTP control for both games now."
       />
 
-      <div className="mb-4 flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1 max-w-md">
+      <div className="mb-4 flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1 max-w-7xl">
         {gameRegistry.map((g) => (
           <button
             key={g.slug}
@@ -306,15 +569,14 @@ export function AdminRtpPage() {
                 step="0.01"
                 value={config.targetRtpPercent}
                 onChange={(e) => setTargetRtp(Number(e.target.value))}
+                disabled={solving}
                 className={inputClass(!rtpValid)}
               />
-              <div className={`text-sm font-medium ${isValid ? "text-emerald-400" : "text-rose-400"}`}>
+              <div className={`text-sm font-medium ${rtpValid ? "text-emerald-400" : "text-rose-400"}`}>
                 Effective RTP: {computedRtp.toFixed(2)}%
-                {isValid ? " ✓" : ""}
+                {rtpValid ? " ✓" : ""}
               </div>
-              {sizzlingStats && (
-                <div className="text-sm font-medium text-slate-400">Loss: {sizzlingStats.lossPercent.toFixed(2)}%</div>
-              )}
+              {solving && <div className="text-sm font-medium text-slate-400">Solving...</div>}
             </div>
 
             {!frequencyValid && (
@@ -345,8 +607,8 @@ export function AdminRtpPage() {
                   <tr key={tier.key} className="border-t border-slate-800">
                     <td className="px-3 py-2 font-medium text-white">
                       <div className="flex items-center gap-2">
-                        {TIER_IMAGES[tier.key] && (
-                          <img src={TIER_IMAGES[tier.key]} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                        {tierImage(config.gameId, tier.key) && (
+                          <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
                         )}
                         {TIER_LABELS[tier.key]}
                       </div>
@@ -372,9 +634,14 @@ export function AdminRtpPage() {
                             onChange={(e) => updateTier(tier.key, { payoutMultiplier: Number(e.target.value) })}
                             className={inputClass()}
                           />
-                          {config.amountThresholds && (
+                          {config.gameId === "cash-machine" && (
                             <div className="mt-1 text-[11px] text-slate-500">
                               Estimate only — real payout is the number shown on the reels (range below)
+                            </div>
+                          )}
+                          {LINE_COST_BY_GAME[config.gameId] !== undefined && (
+                            <div className="mt-1 text-[11px] text-slate-500">
+                              = x{(tier.payoutMultiplier / LINE_COST_BY_GAME[config.gameId]!).toFixed(4)} of the player's real bet
                             </div>
                           )}
                         </div>
@@ -403,6 +670,39 @@ export function AdminRtpPage() {
             </table>
           </div>
 
+          {simStats && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-white">Target Loss %</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={config.targetLossPercent ?? Number(simStats.lossPercent.toFixed(2))}
+                  onChange={(e) => setTargetLoss(Number(e.target.value))}
+                  disabled={solving}
+                  className={inputClass(!lossValid)}
+                />
+                <div className={`text-sm font-medium ${lossValid ? "text-emerald-400" : "text-rose-400"}`}>
+                  Effective Loss: {simStats.lossPercent.toFixed(2)}%
+                  {lossValid ? " ✓" : ""}
+                </div>
+                {solving && <div className="text-sm font-medium text-slate-400">Solving...</div>}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Percent of base spins (the outcomes above, not free games) that pay nothing at all — editing this
+                reshapes the symbol weights above to chase it, same as Target RTP % does, and never touches any
+                payout value.
+              </p>
+              {!lossValid && (
+                <p className="mt-2 text-xs text-rose-400">
+                  {gameId === "vegas-hits"
+                    ? "Vegas Hits' overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."
+                    : "Sizzling 7s' 27 fully-overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."}
+                </p>
+              )}
+            </div>
+          )}
+
           <details className="rounded-xl border border-slate-800 bg-slate-900 p-5">
             <summary className="cursor-pointer text-sm font-semibold text-white">
               Which celebration each win shows (cosmetic only — payout comes from the table above)
@@ -413,8 +713,8 @@ export function AdminRtpPage() {
                 .map((tier) => (
                   <div key={tier.key} className="flex items-center justify-between gap-2 text-sm">
                     <span className="flex items-center gap-2 text-slate-300">
-                      {TIER_IMAGES[tier.key] && (
-                        <img src={TIER_IMAGES[tier.key]} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
+                      {tierImage(config.gameId, tier.key) && (
+                        <img src={tierImage(config.gameId, tier.key)} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
                       )}
                       {TIER_LABELS[tier.key]}
                     </span>
@@ -457,13 +757,16 @@ export function AdminRtpPage() {
                 Which symbols render for each tier (cosmetic only — payout comes from the table above)
               </summary>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {Object.entries(config.ruleTierMap).map(([ruleId, tierKey]) => (
+                {Object.entries(config.ruleTierMap).map(([ruleId, tierKey]) => {
+                  const ruleImages = config.gameId === "crystal-clover" ? CRYSTAL_CLOVER_RULE_IMAGES : SHAMROCK_RULE_IMAGES;
+                  const ruleLabels = config.gameId === "crystal-clover" ? CRYSTAL_CLOVER_RULE_LABELS : SHAMROCK_RULE_LABELS;
+                  return (
                   <div key={ruleId} className="flex items-center justify-between gap-2 text-sm">
                     <span className="flex items-center gap-2 text-slate-300">
-                      {SHAMROCK_RULE_IMAGES[ruleId] && (
-                        <img src={SHAMROCK_RULE_IMAGES[ruleId]} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
+                      {ruleImages[ruleId] && (
+                        <img src={ruleImages[ruleId]} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
                       )}
-                      {SHAMROCK_RULE_LABELS[ruleId] ?? ruleId}
+                      {ruleLabels[ruleId] ?? ruleId}
                     </span>
                     <select
                       value={tierKey}
@@ -482,29 +785,38 @@ export function AdminRtpPage() {
                       ))}
                     </select>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </details>
           )}
 
           {config.amountThresholds && (
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">Amount thresholds</div>
+              <div className="text-sm font-semibold text-white">
+                {config.gameId === "cash-machine" ? "Amount thresholds" : "Celebration thresholds"}
+              </div>
               <p className="mt-1 text-xs text-slate-500">
-                The value range for each tier — this is the real payout control: whatever number the reels land on
-                within a tier's range is exactly what gets paid (scaled by bet). The payout "x" fields above are
-                only an estimate for the RTP preview.
+                {config.gameId === "cash-machine"
+                  ? "The value range for each tier — this is the real payout control: whatever number the reels land on within a tier's range is exactly what gets paid (scaled by bet). The payout \"x\" fields above are only an estimate for the RTP preview."
+                  : "Cosmetic only — the real payout comes from the frequency/payout table above. These are just the win-size cutoffs (as a multiple of total bet) that decide which celebration overlay (Big Win / Mega Win / Jackpot) a spin shows."}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(
-                  [
-                    ["simpleWinMax", "Simple Win max"],
-                    ["bigWinMin", "Big Win min"],
-                    ["megaWinMin", "Mega Win min"],
-                    ["jackpotMin", "Jackpot min"],
-                    ["zeroRespinMin", "Zero Respin min"],
-                    ["zeroRespinMax", "Zero Respin max"],
-                  ] as const
+                  config.gameId === "cash-machine"
+                    ? ([
+                        ["simpleWinMax", "Simple Win max"],
+                        ["bigWinMin", "Big Win min"],
+                        ["megaWinMin", "Mega Win min"],
+                        ["jackpotMin", "Jackpot min"],
+                        ["zeroRespinMin", "Zero Respin min"],
+                        ["zeroRespinMax", "Zero Respin max"],
+                      ] as const)
+                    : ([
+                        ["bigWinMin", "Big Win min (x bet)"],
+                        ["megaWinMin", "Mega Win min (x bet)"],
+                        ["jackpotMin", "Jackpot min (x bet)"],
+                      ] as const)
                 ).map(([field, label]) => (
                   <div key={field}>
                     <label className="block text-xs text-slate-500">{label}</label>
@@ -528,12 +840,18 @@ export function AdminRtpPage() {
           {config.specialReelTiers && (
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
               <div className="text-sm font-semibold text-white">
-                {config.gameId === "5x-rewind" ? "Coin overlay (rolled per reel)" : "Special reel (reel 4)"}
+                {config.gameId === "5x-rewind"
+                  ? "Coin overlay (rolled per reel)"
+                  : config.gameId === "crystal-clover"
+                    ? "MULTIPLIER_2X roll"
+                    : "Special reel (reel 4)"}
               </div>
               <p className="mt-1 text-xs text-slate-500">
                 {config.gameId === "5x-rewind"
                   ? "Rolled independently for each of the 3 reels — a coin can replace that reel's line symbol regardless of what the line tier above rolled. Frequencies here must separately sum to 100%."
-                  : "Fully independent from the table above — this is reel 4's own odds and effects, applied on top of the base win whenever reels 1-2-3 win. Frequencies here must separately sum to 100%."}
+                  : config.gameId === "crystal-clover"
+                    ? "Fully independent from the table above — rolled every spin regardless of win/loss, applied as a flat multiplier on top of whatever the table above pays. Frequencies here must separately sum to 100%."
+                    : "Fully independent from the table above — this is reel 4's own odds and effects, applied on top of the base win whenever reels 1-2-3 win. Frequencies here must separately sum to 100%."}
               </p>
               {!specialFrequencyValid && (
                 <p className="mt-2 text-sm text-rose-400">
@@ -554,8 +872,8 @@ export function AdminRtpPage() {
                       <tr key={tier.key} className="border-t border-slate-800">
                         <td className="px-3 py-2 font-medium text-white">
                           <div className="flex items-center gap-2">
-                            {TIER_IMAGES[tier.key] && (
-                              <img src={TIER_IMAGES[tier.key]} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                            {tierImage(config.gameId, tier.key) && (
+                              <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
                             )}
                             {TIER_LABELS[tier.key]}
                           </div>
@@ -626,6 +944,225 @@ export function AdminRtpPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {(config.gameId === "crystal-clover" || config.gameId === "vegas-hits") && config.reelStateConfig && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <div className="text-sm font-semibold text-white">Reel state chance</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Each reel always shows either 1 symbol on the center payline or 2 symbols on the top+bottom
+                paylines — never all 3. This is the chance it picks the center-only state.
+              </p>
+              <div className="mt-3">
+                <label className="block text-xs text-slate-500">Center-row chance (%)</label>
+                <input
+                  type="number"
+                  step="1"
+                  min={0}
+                  max={100}
+                  value={config.reelStateConfig.centerRowChancePercent}
+                  onChange={(e) => updateReelStateConfig({ centerRowChancePercent: Number(e.target.value) })}
+                  className={`${inputClass()} mt-1 w-32`}
+                />
+              </div>
+            </div>
+          )}
+
+          {config.gameId === "vegas-hits" && config.wildRules && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <div className="text-sm font-semibold text-white">RED HOT 3X wild rules</div>
+              <p className="mt-1 text-xs text-slate-500">
+                None of these correspond to a reel symbol above — they're the wild's own payout rules (see the
+                paytable modal in-game for the plain-English version). The 4 "bet" fields use the same internal
+                LINE_COST=30 reference every symbol payout above does (hence the x-bet conversion shown under
+                each); the 2 multiplier fields are plain ratios applied to whatever real symbol the wild helped
+                complete.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="block text-xs text-slate-500">1 Wild, no match (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.wildRules.onePureBet}
+                    onChange={(e) => updateWildRules({ onePureBet: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                  <div className="mt-1 text-[11px] text-slate-500">= x{(config.wildRules.onePureBet / LINE_COST_BY_GAME["vegas-hits"]!).toFixed(4)} bet</div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">2 Wild, no match (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.wildRules.twoPureBet}
+                    onChange={(e) => updateWildRules({ twoPureBet: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                  <div className="mt-1 text-[11px] text-slate-500">= x{(config.wildRules.twoPureBet / LINE_COST_BY_GAME["vegas-hits"]!).toFixed(4)} bet</div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">3 Wild (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.wildRules.threePureBet}
+                    onChange={(e) => updateWildRules({ threePureBet: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                  <div className="mt-1 text-[11px] text-slate-500">= x{(config.wildRules.threePureBet / LINE_COST_BY_GAME["vegas-hits"]!).toFixed(4)} bet</div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">Any 7 mixed, no Wild (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.wildRules.anyMixBet}
+                    onChange={(e) => updateWildRules({ anyMixBet: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                  <div className="mt-1 text-[11px] text-slate-500">= x{(config.wildRules.anyMixBet / LINE_COST_BY_GAME["vegas-hits"]!).toFixed(4)} bet</div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">1 Wild completes a match (x)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.wildRules.oneCompleteMultiplier}
+                    onChange={(e) => updateWildRules({ oneCompleteMultiplier: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">2 Wild complete a match (x)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={config.wildRules.twoCompleteMultiplier}
+                    onChange={(e) => updateWildRules({ twoCompleteMultiplier: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-32`}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {config.gameId === "life-of-luxury" && config.symbolPayouts && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <div className="text-sm font-semibold text-white">Symbol payouts (x line bet)</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Each symbol's own 3/4/5-of-a-kind payout — matched left-to-right on an active line, minimum 3.
+                These don't correspond to the Frequency % rows above (those are reel-strip draw weight); this is
+                the actual paytable.
+              </p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-slate-500">
+                    <tr>
+                      <th className="py-1 pr-3">Symbol</th>
+                      <th className="py-1 pr-3">X3</th>
+                      <th className="py-1 pr-3">X4</th>
+                      <th className="py-1 pr-3">X5</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {LOL_REGULAR_SYMBOLS.map((symbol) => (
+                      <tr key={symbol} className="border-t border-slate-800">
+                        <td className="py-2 pr-3 font-medium text-white">
+                          <div className="flex items-center gap-2">
+                            {tierImage("life-of-luxury", symbol) && (
+                              <img src={tierImage("life-of-luxury", symbol)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                            )}
+                            {TIER_LABELS[symbol]}
+                          </div>
+                        </td>
+                        {(["x3", "x4", "x5"] as const).map((field) => (
+                          <td key={field} className="py-2 pr-3">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={config.symbolPayouts![symbol][field]}
+                              onChange={(e) => updateSymbolPayout(symbol, { [field]: Number(e.target.value) })}
+                              className={`${inputClass()} w-24`}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {config.gameId === "life-of-luxury" && config.scatterRules && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <div className="text-sm font-semibold text-white">Coin scatter rules</div>
+              <p className="mt-1 text-xs text-slate-500">
+                Coin is rolled independently on every cell at its own Chance % below — it is NOT one of the
+                Frequency % rows above (those 10 rows are the 9 payout symbols + Filler, summing to 100% on their
+                own). Coin counts anywhere on the 5x3 grid (no payline needed). X3/X4/X5 are multiples of the bet
+                (this game has no per-line split — what you bet is what's deducted). X5 also covers 5 or more (15
+                cells can hold more than 5). A 3+ trigger on a base spin awards the free spins below; a coin
+                during an already-active free-spins round still pays its cash prize but never awards more free
+                spins (no retriggering).
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-5">
+                <div>
+                  <label className="block text-xs text-slate-500">Chance % (per cell)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={100}
+                    value={config.scatterRules.chancePercent}
+                    onChange={(e) => updateScatterRules({ chancePercent: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-28`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">X3 (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.scatterRules.x3}
+                    onChange={(e) => updateScatterRules({ x3: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-28`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">X4 (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.scatterRules.x4}
+                    onChange={(e) => updateScatterRules({ x4: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-28`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">X5+ (bet)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.scatterRules.x5}
+                    onChange={(e) => updateScatterRules({ x5: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-28`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">Free spins awarded</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min={0}
+                    value={config.scatterRules.freeSpinsAwarded}
+                    onChange={(e) => updateScatterRules({ freeSpinsAwarded: Number(e.target.value) })}
+                    className={`${inputClass()} mt-1 w-28`}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

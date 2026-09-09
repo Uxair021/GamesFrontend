@@ -5,6 +5,11 @@ import { buffalo777Meta } from "./Buffalo777/meta";
 import { crazy777Meta } from "./Crazy777/meta";
 import { fiveXRewindMeta } from "./FiveXRewind/meta";
 import { sizzlingSevensMeta } from "./SizzlingSevens/meta";
+import { crystalCloverMeta } from "./CrystalClover/meta";
+import { fruity777Meta } from "./Fruity777/meta";
+import { mega10xPayMeta } from "./Mega10XPay/meta";
+import { vegasHitsMeta } from "./VegasHits/meta";
+import { lifeOfLuxuryMeta } from "./LifeOfLuxury/meta";
 
 export interface GameRegistryEntry {
   slug: string;
@@ -61,6 +66,46 @@ export const gameRegistry: GameRegistryEntry[] = [
     description: sizzlingSevensMeta.description,
     component: lazy(() =>
       import("./SizzlingSevens/SizzlingSevensGame").then((m) => ({ default: m.SizzlingSevensGame }))
+    ),
+  },
+  {
+    slug: crystalCloverMeta.slug,
+    name: crystalCloverMeta.name,
+    description: crystalCloverMeta.description,
+    component: lazy(() =>
+      import("./CrystalClover/CrystalCloverGame").then((m) => ({ default: m.CrystalCloverGame }))
+    ),
+  },
+  {
+    slug: fruity777Meta.slug,
+    name: fruity777Meta.name,
+    description: fruity777Meta.description,
+    component: lazy(() =>
+      import("./Fruity777/Fruity777Game").then((m) => ({ default: m.Fruity777Game }))
+    ),
+  },
+  {
+    slug: mega10xPayMeta.slug,
+    name: mega10xPayMeta.name,
+    description: mega10xPayMeta.description,
+    component: lazy(() =>
+      import("./Mega10XPay/Mega10XPayGame").then((m) => ({ default: m.Mega10XPayGame }))
+    ),
+  },
+  {
+    slug: vegasHitsMeta.slug,
+    name: vegasHitsMeta.name,
+    description: vegasHitsMeta.description,
+    component: lazy(() =>
+      import("./VegasHits/VegasHitsGame").then((m) => ({ default: m.VegasHitsGame }))
+    ),
+  },
+  {
+    slug: lifeOfLuxuryMeta.slug,
+    name: lifeOfLuxuryMeta.name,
+    description: lifeOfLuxuryMeta.description,
+    component: lazy(() =>
+      import("./LifeOfLuxury/LifeOfLuxuryGame").then((m) => ({ default: m.LifeOfLuxuryGame }))
     ),
   },
 ];

@@ -9,13 +9,13 @@ const SYMBOL_PADDING = 2;
  * cylindrical-wheel look) — this game is a flat 3x3 grid, and Scene.ts's win-highlight boxes
  * assume plain `rowIndex * cellHeight` spacing with no gap, so any nonzero value here would
  * make the rendered symbols drift out of alignment with their own highlight boxes and frame. */
-const ROW_GAP_PX = 2;
+const ROW_GAP_PX = 8;
 /** Constant-speed scroll rate during the unbounded idle spin, px/ms. */
-const IDLE_SPEED = 2.35;
+const IDLE_SPEED = 3.35;
 /** How many strip steps ahead of the current scroll position get pre-populated with filler,
  * recycled as the reel scrolls — keeps memory/child-count bounded during an indefinitely long
  * idle spin (the player can hold it spinning as long as they like before clicking Stop). */
-const BUFFER_STEPS = 14;
+const BUFFER_STEPS = 20;
 /** Symbols render slightly larger than a strict "fit inside the cell" scale would give — the
  * clipping mask (see the Reel doc comment below) makes a bit of intentional overflow safe. */
 const SYMBOL_SCALE_BOOST = 1.22;
@@ -27,6 +27,10 @@ const PULSE_PERIOD_MS = 520;
  * nothing about it could have been seen or targeted before clicking Stop. */
 const ADVANCE_STEPS = 2;
 const ADVANCE_DURATION_MS = 340;
+/** On a losing spin, the strip settles this many row-heights off its clean center — a classic
+ * "near miss" look (real reel-strip machines do this too). Purely cosmetic: see stopAndSettle's
+ * landClean param doc comment for why this can never affect which symbols get reported/scored. */
+const LOSE_LANDING_OFFSET_FRAC = 0.24;
 
 function easeOutBack(t: number): number {
   // Overshoots past 1 then eases back — "advances a little past the stop, then settles" bounce.
@@ -54,17 +58,12 @@ type Mode = "idle" | "spinning";
  * `view` (fixed, what Scene.ts positions) holds a clipping mask plus `strip` (the scrolling
  * inner container) — without that mask, filler symbols scrolling above/below the 3-row window
  * during an idle spin render fully visible instead of being cut off at the frame's edges.
+ *
+ * This reel doesn't own any win-celebration visuals itself — Scene.ts draws one overlay across
+ * *all* 3 reels at once (not per-symbol boxes) and asks each reel only to build a detached,
+ * self-contained visual for a winning row via buildWinVisual(), which it then positions above
+ * that shared overlay. See SizzlingSevensScene.ts's showWinHighlights.
  */
-interface ActiveWinGif {
-  gif: AnimatedGIF;
-  mask: Graphics;
-}
-
-interface ActivePulse {
-  rafId: number;
-  sprite: Sprite & { baseScale: number };
-}
-
 export class Reel {
   public readonly view: Container;
   private readonly strip: Container;
@@ -76,10 +75,6 @@ export class Reel {
   private pendingTimeouts: number[] = [];
   private pendingFrames: Array<() => void> = [];
   private visibleCells: Container[] = [];
-  /** Win animations currently playing, keyed by row (0/1/2) — a reel can have more than one
-   * row winning at once (different lines), so each row tracks its own overlay independently. */
-  private activeGifs: Map<number, ActiveWinGif> = new Map();
-  private activePulses: Map<number, ActivePulse> = new Map();
 
   private mode: Mode = "idle";
   private stripCells: Array<{ cell: Container; index: number }> = [];
@@ -186,7 +181,6 @@ export class Reel {
   /** Renders exactly these 3 symbols (top/middle/bottom), no animation. */
   showStatic(target: [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol]): void {
     this.stopAllAnimation();
-    this.clearWinAnimations();
     this.strip.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.strip.y = 0;
     this.stripCells = [];
@@ -243,7 +237,6 @@ export class Reel {
    * would no longer be tracking) so there's no jump at the start. */
   startContinuousSpin(): void {
     this.stopAllAnimation();
-    this.clearWinAnimations();
     this.mode = "spinning";
 
     const startY = this.strip.y;
@@ -266,19 +259,56 @@ export class Reel {
     this.pendingFrames.push(() => cancelAnimationFrame(rafId));
   }
 
+  /** The strip index (see stopAndSettle/ensureFilledTo) that ADVANCE_STEPS-past-`this.strip.y`
+   * would cleanly settle on — the single source of truth both peekStopSymbols() and
+   * stopAndSettle() derive their symbol read from, so calling one right before the other (no
+   * animation frame in between, i.e. `this.strip.y` unchanged) is guaranteed to agree. */
+  private computeSettleK(): number {
+    const rawTargetY = this.strip.y + ADVANCE_STEPS * this.step;
+    // Clean positions for this reel are strip.y = (k + phaseOffsetSteps) * step - ROW_GAP_PX
+    // for integer k (see restY) — solve for the k nearest rawTargetY.
+    return Math.round((rawTargetY + ROW_GAP_PX) / this.step - this.phaseOffsetSteps);
+  }
+
+  private symbolsAtK(k: number): [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol] {
+    const cleanTargetY = (k + this.phaseOffsetSteps) * this.step - ROW_GAP_PX;
+    this.ensureFilledTo(Math.ceil(cleanTargetY / this.step) + 3);
+    const cellsByIndex = new Map(this.stripCells.map((s) => [s.index, s.cell]));
+    return [0, 1, 2].map((row) => {
+      const idx = k - row - 1;
+      return (cellsByIndex.get(idx)?.label as SizzlingSymbol | undefined) ?? this.randomSymbol();
+    }) as [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol];
+  }
+
+  /** Read-only preview of exactly what stopAndSettle() would report right now, without
+   * animating or changing mode — lets a caller (Scene.ts) decide *how* to land (see
+   * stopAndSettle's landClean param) before committing to the real stop. Must be followed by
+   * stopAndSettle() with no animation frame in between to guarantee the same symbols; it's safe
+   * to call more than once (ensureFilledTo is idempotent past what's already generated). */
+  peekStopSymbols(): [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol] {
+    if (this.mode !== "spinning") {
+      return this.visibleCells.map((c) => c.label as SizzlingSymbol) as [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol];
+    }
+    return this.symbolsAtK(this.computeSettleK());
+  }
+
   /** Stops the idle scroll — but not immediately at the click: advances roughly ADVANCE_STEPS
    * further rows first (with an overshoot-and-settle bounce), landing on content that was
    * already generated ahead of the visible window (see BUFFER_STEPS) but never actually shown
    * before this call. That's what makes the result unguessable from what was on screen at
    * click time, without needing a server-predetermined target or a jump to unrelated content —
-   * it's simply the next couple of rows the player hadn't scrolled to yet. Unlike an earlier
-   * version of this method, the settle point is snapped to this reel's own nearest clean
-   * center-aligned position (respecting phaseOffsetSteps) rather than preserving whatever
-   * fractional offset existed at click time — every symbol always lands fully centered in its
-   * row, never split mid-transition; the unpredictability still comes entirely from advancing
-   * into unseen content, not from staying at an odd sub-row offset. No-ops (resolves with
-   * whatever was last reported) if this reel isn't currently mid-spin. */
-  stopAndSettle(): Promise<[SizzlingSymbol, SizzlingSymbol, SizzlingSymbol]> {
+   * it's simply the next couple of rows the player hadn't scrolled to yet.
+   *
+   * `landClean` (default true) controls the *visual* rest position only: true snaps the strip
+   * to this reel's exact clean center-aligned position (respecting phaseOffsetSteps), same as
+   * always. false — used for a losing spin, decided by Scene.ts via peekStopSymbols() before
+   * this is called — settles the strip a bit off that clean position instead (a "near miss"
+   * look), by shifting the whole strip uniformly. This can NEVER change which symbols are
+   * reported: the settle index `k` (and therefore every cell that ends up in visibleCells) is
+   * computed once, before the clean-vs-offset choice is applied to anything, and the offset
+   * only nudges strip.y — it never touches k or which cell object each row reads. No-ops
+   * (resolves with whatever was last reported) if this reel isn't currently mid-spin. */
+  stopAndSettle(landClean = true): Promise<[SizzlingSymbol, SizzlingSymbol, SizzlingSymbol]> {
     const readSymbols = () => this.visibleCells.map((c) => c.label as SizzlingSymbol) as [SizzlingSymbol, SizzlingSymbol, SizzlingSymbol];
     if (this.mode !== "spinning") return Promise.resolve(readSymbols());
 
@@ -287,15 +317,12 @@ export class Reel {
     this.mode = "idle";
 
     const startY = this.strip.y;
-    const rawTargetY = startY + ADVANCE_STEPS * this.step;
-    // Clean positions for this reel are strip.y = (k + phaseOffsetSteps) * step - ROW_GAP_PX
-    // for integer k (see restY) — solve for the k nearest rawTargetY, then rebuild the exact
-    // clean strip.y from it, so the same k can drive both the animation target below and the
-    // index lookup after it settles (recomputing k by re-dividing targetY/step later would
-    // reintroduce the same rounding drift phaseOffsetSteps causes here).
-    const k = Math.round((rawTargetY + ROW_GAP_PX) / this.step - this.phaseOffsetSteps);
-    const targetY = (k + this.phaseOffsetSteps) * this.step - ROW_GAP_PX;
-    this.ensureFilledTo(Math.ceil(targetY / this.step) + 3);
+    const k = this.computeSettleK();
+    const cleanTargetY = (k + this.phaseOffsetSteps) * this.step - ROW_GAP_PX;
+    const finalY = landClean
+      ? cleanTargetY
+      : cleanTargetY + (Math.random() < 0.5 ? 1 : -1) * LOSE_LANDING_OFFSET_FRAC * this.step * (0.6 + Math.random() * 0.4);
+    this.ensureFilledTo(Math.ceil(cleanTargetY / this.step) + 3);
 
     return new Promise((resolve) => {
       const start = performance.now();
@@ -303,13 +330,13 @@ export class Reel {
       const tick = (now: number) => {
         const t = Math.min(Math.max((now - start) / ADVANCE_DURATION_MS, 0), 1);
         const eased = easeOutBack(t);
-        this.strip.y = startY + (targetY - startY) * eased;
+        this.strip.y = startY + (finalY - startY) * eased;
         if (t < 1) {
           rafId = requestAnimationFrame(tick);
           return;
         }
 
-        this.strip.y = targetY;
+        this.strip.y = finalY;
         this.pruneBehind();
 
         const cellsByIndex = new Map(this.stripCells.map((s) => [s.index, s.cell]));
@@ -329,17 +356,34 @@ export class Reel {
     });
   }
 
-  /** Plays a win animation over row `row`'s symbol — its matching .gif if one exists, else a
-   * pulse (BONUS has no .gif yet). Attached directly to that row's own cell, so it inherits
-   * wherever that cell actually is on screen (including a mid-transition freeze position — see
-   * stopAndSettle) rather than assuming a clean resting spot. */
-  playWinAt(row: number): void {
-    const cell = this.visibleCells[row];
-    if (!cell) return;
-    const symbol = cell.label as SizzlingSymbol;
-    const sprite = cell.children[0] as (Sprite & { baseScale: number }) | undefined;
-    if (!sprite) return;
+  /** Local y (in `view`'s coordinate space) where row `row` currently sits — lets Scene.ts
+   * position a scene-level element (the win overlay's highlight, see buildWinVisual) to line
+   * up with a real row without needing to know this reel's own phaseOffsetSteps math. */
+  getRowY(row: number): number {
+    return this.restY(row);
+  }
 
+  /** Hides (or restores) row `row`'s own static sprite. The win overlay is only ~50% opaque,
+   * so without this the original PNG still shows through it, dimmed, around/behind the
+   * detached gif highlight Scene.ts draws on top (see buildWinVisual) — this is what actually
+   * removes it from view entirely for the rows currently celebrating a win. */
+  setRowSpriteVisible(row: number, visible: boolean): void {
+    const sprite = this.visibleCells[row]?.children[0] as Sprite | undefined;
+    if (sprite) sprite.visible = visible;
+  }
+
+  /** Builds a detached, self-contained visual (row `row`'s matching-symbol .gif if one exists,
+   * else a pulsing clone — BONUS has no .gif yet) for Scene.ts to position above its own
+   * shared win overlay. Doesn't touch this reel's own display tree at all — pair this with
+   * setRowSpriteVisible(row, false) to actually hide the original underneath it. Returns null
+   * if `row` isn't currently showing anything (shouldn't happen once settled, but is possible
+   * mid-spin). */
+  buildWinVisual(row: number): { view: Container; play: () => void; destroy: () => void } | null {
+    const cell = this.visibleCells[row];
+    if (!cell) return null;
+    const symbol = cell.label as SizzlingSymbol;
+
+    const container = new Container();
     const template = this.gifTemplates[symbol];
     if (template) {
       const gif = template.clone();
@@ -354,55 +398,55 @@ export class Reel {
       const mask = new Graphics();
       mask.rect(0, 0, this.cellWidth, this.cellHeight);
       mask.fill({ color: 0xffffff });
-      cell.addChild(mask);
+      container.addChild(mask);
       gif.mask = mask;
+      container.addChild(gif);
 
-      sprite.visible = false;
-      cell.addChild(gif);
-      gif.play();
-      this.activeGifs.set(row, { gif, mask });
-      return;
+      return {
+        view: container,
+        play: () => gif.play(),
+        destroy: () => {
+          gif.mask = null;
+          gif.destroy();
+          mask.destroy();
+          container.destroy();
+        },
+      };
     }
 
-    // No .gif for this symbol (BONUS) — pulse its scale instead.
+    // No .gif for this symbol (BONUS) — a fresh pulsing sprite clone instead.
+    const sprite = new Sprite(this.textures[symbol]);
+    sprite.anchor.set(0.5);
+    const maxW = this.cellWidth - SYMBOL_PADDING * 2;
+    const maxH = this.cellHeight - SYMBOL_PADDING * 2;
+    const baseScale = Math.min(maxW / sprite.texture.width, maxH / sprite.texture.height) * SYMBOL_SCALE_BOOST;
+    sprite.scale.set(baseScale);
+    sprite.x = this.cellWidth / 2;
+    sprite.y = this.cellHeight / 2;
+    container.addChild(sprite);
+
+    let rafId = 0;
     const start = performance.now();
     const animate = () => {
       const elapsed = performance.now() - start;
       const pulse = 0.5 + 0.5 * Math.sin((elapsed / PULSE_PERIOD_MS) * Math.PI * 2);
-      sprite.scale.set(sprite.baseScale * (1 + pulse * 0.12));
+      sprite.scale.set(baseScale * (1 + pulse * 0.12));
       rafId = requestAnimationFrame(animate);
     };
-    let rafId = requestAnimationFrame(animate);
-    this.activePulses.set(row, { rafId, sprite });
-  }
-
-  /** Stops every active win animation (gifs and pulses) across all 3 rows and restores each
-   * row's plain static sprite. */
-  clearWinAnimations(): void {
-    for (const [, { gif, mask }] of this.activeGifs) {
-      gif.mask = null;
-      gif.parent?.removeChild(gif);
-      gif.destroy();
-      mask.parent?.removeChild(mask);
-      mask.destroy();
-    }
-    this.activeGifs.clear();
-
-    for (const [, { rafId, sprite }] of this.activePulses) {
-      cancelAnimationFrame(rafId);
-      sprite.scale.set(sprite.baseScale);
-    }
-    this.activePulses.clear();
-
-    this.visibleCells.forEach((cell) => {
-      const sprite = cell.children[0] as Sprite | undefined;
-      if (sprite) sprite.visible = true;
-    });
+    return {
+      view: container,
+      play: () => {
+        rafId = requestAnimationFrame(animate);
+      },
+      destroy: () => {
+        cancelAnimationFrame(rafId);
+        container.destroy({ children: true });
+      },
+    };
   }
 
   destroy(): void {
     this.stopAllAnimation();
-    this.clearWinAnimations();
     this.view.destroy({ children: true });
   }
 }
