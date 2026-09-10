@@ -13,6 +13,23 @@ const DEFAULT_BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 20, 25, 30];
 const WIN_GLOW_MIN_DISPLAY_MS = 2000;
 const BG_MUSIC_URL = "/Sound/atlasaudio-game-game-music-576637.mp3";
 
+/** Maps the backend's winTierKey (SpinResponse.winTierKey) to the ladder sign it should pour
+ * coins out of — see Buffalo777Scene's LADDER_POSITIONS. Keys mirror engine.ts's TierKey. */
+const TIER_KEY_TO_LADDER_SYMBOL: Record<string, PayoutRow["symbol"]> = {
+  ten: "TEN",
+  jack: "JACK",
+  queen: "QUEEN",
+  king: "KING",
+  ace: "ACE",
+  bull: "BULL",
+  anyBar: "ANY_BAR",
+  singleBar: "SINGLE_BAR",
+  doubleBar: "DOUBLE_BAR",
+  tripleBar: "TRIPLE_BAR",
+  moneyBag: "MONEY_BAG",
+  coin: "COIN",
+};
+
 const PAYOUT_LABELS: Record<PayoutRow["symbol"], string> = {
   COIN: "3× Gold Coin",
   MONEY_BAG: "3× Money Bag",
@@ -143,6 +160,9 @@ export function Buffalo777Game() {
         sceneRef.current.setWinGlow(true);
         winGlowActiveRef.current = true;
         winGlowStartRef.current = Date.now();
+
+        const ladderSymbol = result.winTierKey ? TIER_KEY_TO_LADDER_SYMBOL[result.winTierKey] : undefined;
+        if (ladderSymbol) sceneRef.current.playCoinFall(ladderSymbol);
       }
 
       if (result.tier) {

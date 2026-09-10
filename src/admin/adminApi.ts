@@ -205,7 +205,30 @@ export type TierKey =
   | "GOLD_BAR"
   | "SILVER_BAR"
   | "BRONZE_BAR"
-  | "COIN";
+  | "COIN"
+  // Rubber Duck only — one row per reel symbol (stored in `tiers`), same "reel-strip weight
+  // table" shape as Life of Luxury/Vegas Hits. Every row's payoutMultiplier IS used directly
+  // here: a flat per-hit value, no 3/4/5-of-a-kind tiers — a symbol pays for itself the instant
+  // it lands on any of the 5 reels, no matching required. Reuses "BOAT"/"BONUS" above.
+  | "TRIPLE_7"
+  | "DOUBLE_7"
+  | "SEVEN"
+  | "GUN"
+  | "TOOL"
+  | "SHAMPOO"
+  | "TOWEL"
+  | "BRUSH"
+  | "SAFEGUARD"
+  | "CAP"
+  | "POT"
+  | "SOAP"
+  | "SPONGE"
+  | "AVOCADO"
+  | "BANANA"
+  | "COCONUT"
+  | "GRAPES"
+  | "LEMON"
+  | "STRAWBERRY";
 
 export interface TierRow {
   key: TierKey;
@@ -1162,11 +1185,68 @@ function computeLifeOfLuxuryRtpPercent(config: PaytableConfig): number {
   return (lineRTP + scatterRTP + freeSpinEV) * 100;
 }
 
+/** Rubber Duck's 14 paying symbols and BONUS's own key — mirrors games/RubberDuck/config.ts. */
+const RD_PAYING_SYMBOLS: TierKey[] = [
+  "TRIPLE_7",
+  "DOUBLE_7",
+  "SEVEN",
+  "BOAT",
+  "GUN",
+  "TOOL",
+  "SHAMPOO",
+  "TOWEL",
+  "BRUSH",
+  "SAFEGUARD",
+  "CAP",
+  "POT",
+  "SOAP",
+  "SPONGE",
+];
+const RD_REEL_COUNT = 5;
+const RD_FREE_SPIN_TRIGGER_COUNT = 3;
+const RD_FREE_SPINS_BASE = 15;
+const RD_FREE_SPINS_RETRIGGER = 10;
+const RD_FREE_SPIN_WIN_MULTIPLIER = 3;
+
+function rdNChooseK(n: number, k: number): number {
+  let result = 1;
+  for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
+  return result;
+}
+
+/** Mirrors the backend's computeRubberDuckRtpPercent (services/paytableConfig.ts) exactly —
+ * closed-form, no simulation. Each of the 5 reels independently draws from `tiers`; every reel
+ * landing a paying symbol adds that symbol's own payoutMultiplier, no matching required. See the
+ * backend function's doc comment for the full derivation (base RTP + first-order free-spin/
+ * retrigger EV term). */
+function computeRubberDuckRtpPercent(config: PaytableConfig): number {
+  const weightOf = (symbol: string) => config.tiers.find((t) => t.key === symbol)?.frequencyPercent ?? 0;
+  const payoutOf = (symbol: string) => config.tiers.find((t) => t.key === symbol)?.payoutMultiplier ?? 0;
+
+  const perReelEV = RD_PAYING_SYMBOLS.reduce((sum, symbol) => sum + (weightOf(symbol) / 100) * payoutOf(symbol), 0);
+  const baseRtp = RD_REEL_COUNT * perReelEV;
+
+  const pBonus = weightOf("BONUS") / 100;
+  let pTrig = 0;
+  for (let k = RD_FREE_SPIN_TRIGGER_COUNT; k <= RD_REEL_COUNT; k++) {
+    pTrig += rdNChooseK(RD_REEL_COUNT, k) * Math.pow(pBonus, k) * Math.pow(1 - pBonus, RD_REEL_COUNT - k);
+  }
+
+  const avgFreeSpins = RD_FREE_SPINS_BASE * (1 + pTrig * RD_FREE_SPINS_RETRIGGER);
+  const freeSpinRtp = pTrig * avgFreeSpins * (RD_FREE_SPIN_WIN_MULTIPLIER * baseRtp);
+
+  return (baseRtp + freeSpinRtp) * 100;
+}
+
 /**
  * Mirrors the backend's computeRtpPercent (backEnd/src/services/paytableConfig.ts) so the
  * admin page can show the effective RTP live, before the admin ever hits Save.
  */
 export function computeRtpPercent(config: PaytableConfig): number {
+  if (config.gameId === "rubber-duck") {
+    return computeRubberDuckRtpPercent(config);
+  }
+
   if (config.gameId === "life-of-luxury") {
     return computeLifeOfLuxuryRtpPercent(config);
   }

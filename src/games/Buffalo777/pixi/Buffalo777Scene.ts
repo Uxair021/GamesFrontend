@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from "pixi.js";
 import { BuffaloSymbol, PayoutRow } from "../api";
 import { loadSymbolTextures, loadBackgroundTexture, loadWinGifAnimations } from "./symbols";
 import { Reel } from "./Reel";
@@ -51,11 +51,28 @@ const LADDER_TEXT_STYLE = new TextStyle({
   align: "center",
 });
 
+/** How many coin sprites spill out per win-line payout. */
+const COIN_FALL_COUNT = 56;
+/** Native-pixel size range each falling coin is scaled to. */
+const COIN_MIN_SIZE = 34;
+const COIN_MAX_SIZE = 54;
+/** Each coin's fall takes COIN_FALL_MIN_DURATION_MS to (COIN_FALL_MIN_DURATION_MS +
+ * COIN_FALL_DURATION_VARIANCE_MS) ms — raise these to make the fall itself last longer. */
+const COIN_FALL_MIN_DURATION_MS = 900;
+const COIN_FALL_DURATION_VARIANCE_MS = 900;
+/** Coins start falling at a random delay between 0 and this many ms, so they don't all drop
+ * in a single synchronized line — raise it to spread the cascade out over more time. */
+const COIN_FALL_MAX_STAGGER_MS = 850;
+
 export class Buffalo777Scene {
   private reels: Reel[] = [];
   private root: Container;
   private ladderTexts: Partial<Record<PayoutRow["symbol"], Text>> = {};
   private gifTemplates: Awaited<ReturnType<typeof loadWinGifAnimations>>;
+  private coinTexture: Texture;
+  private coinLayer: Container;
+  private coinTimeouts: number[] = [];
+  private coinFrameCancels: Array<() => void> = [];
 
   private constructor(
     app: Application,
@@ -64,6 +81,7 @@ export class Buffalo777Scene {
     gifTemplates: Awaited<ReturnType<typeof loadWinGifAnimations>>
   ) {
     this.gifTemplates = gifTemplates;
+    this.coinTexture = textures.COIN;
     this.root = new Container();
     app.stage.addChild(this.root);
     this.root.addChild(background);
@@ -101,6 +119,10 @@ export class Buffalo777Scene {
       this.root.addChild(text);
       this.ladderTexts[symbol] = text;
     }
+
+    // On top of everything (reels + ladder text) so falling coins read clearly over both.
+    this.coinLayer = new Container();
+    this.root.addChild(this.coinLayer);
   }
 
   static async create(app: Application): Promise<Buffalo777Scene> {
@@ -146,7 +168,65 @@ export class Buffalo777Scene {
     this.reels.forEach((reel) => (active ? reel.startWinGlow() : reel.stopWinGlow()));
   }
 
+  /** Spills a handful of coins out of the ladder sign for whichever payout line just won,
+   * falling past the bottom of the screen — e.g. `symbol="COIN"` pours coins out of the
+   * left ladder's Gold Coin entry. Purely cosmetic; call once per winning spin. */
+  playCoinFall(symbol: PayoutRow["symbol"]): void {
+    const pos = LADDER_POSITIONS[symbol];
+    if (!pos) return;
+    const originX = pos.xFrac * CANVAS_WIDTH;
+    const originY = pos.yFrac * CANVAS_HEIGHT;
+    const floorY = CANVAS_HEIGHT + 60;
+
+    for (let i = 0; i < COIN_FALL_COUNT; i++) {
+      const coin = new Sprite(this.coinTexture);
+      coin.anchor.set(0.5);
+      const size = COIN_MIN_SIZE + Math.random() * (COIN_MAX_SIZE - COIN_MIN_SIZE);
+      coin.scale.set(size / this.coinTexture.width);
+      coin.rotation = Math.random() * Math.PI * 2;
+      coin.alpha = 0;
+
+      // Coins pop out clustered around the number, then drift a bit wider as they fall.
+      const popX = (Math.random() - 0.5) * 30;
+      const driftX = (Math.random() - 0.5) * 90;
+      coin.x = originX + popX;
+      coin.y = originY;
+      this.coinLayer.addChild(coin);
+
+      const delay = Math.random() * COIN_FALL_MAX_STAGGER_MS;
+      const duration = COIN_FALL_MIN_DURATION_MS + Math.random() * COIN_FALL_DURATION_VARIANCE_MS;
+      const spinSpeed = (Math.random() - 0.5) * 8;
+      const startY = originY;
+
+      const timeoutId = window.setTimeout(() => {
+        const start = performance.now();
+        let rafId = 0;
+        const tick = (now: number) => {
+          const t = Math.min(Math.max((now - start) / duration, 0), 1);
+          // Ease-in fall (accelerating, like gravity) from a slower emerging pop.
+          const eased = t * t;
+          coin.y = startY + (floorY - startY) * eased;
+          coin.x = originX + popX + driftX * t;
+          coin.rotation += spinSpeed * 0.05;
+          coin.alpha = t < 0.12 ? t / 0.12 : t > 0.8 ? Math.max(0, 1 - (t - 0.8) / 0.2) : 1;
+          if (t < 1) {
+            rafId = requestAnimationFrame(tick);
+          } else {
+            this.coinLayer.removeChild(coin);
+            coin.destroy();
+          }
+        };
+        rafId = requestAnimationFrame(tick);
+        this.coinFrameCancels.push(() => cancelAnimationFrame(rafId));
+      }, delay);
+
+      this.coinTimeouts.push(timeoutId);
+    }
+  }
+
   destroy(): void {
+    this.coinTimeouts.forEach((id) => window.clearTimeout(id));
+    this.coinFrameCancels.forEach((cancel) => cancel());
     this.reels.forEach((r) => r.destroy());
     Object.values(this.gifTemplates).forEach((template) => template?.destroy());
     this.root.destroy({ children: true });

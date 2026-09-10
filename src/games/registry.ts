@@ -10,6 +10,7 @@ import { fruity777Meta } from "./Fruity777/meta";
 import { mega10xPayMeta } from "./Mega10XPay/meta";
 import { vegasHitsMeta } from "./VegasHits/meta";
 import { lifeOfLuxuryMeta } from "./LifeOfLuxury/meta";
+import { rubberDuckMeta } from "./RubberDuck/meta";
 
 export interface GameRegistryEntry {
   slug: string;
@@ -106,6 +107,14 @@ export const gameRegistry: GameRegistryEntry[] = [
     description: lifeOfLuxuryMeta.description,
     component: lazy(() =>
       import("./LifeOfLuxury/LifeOfLuxuryGame").then((m) => ({ default: m.LifeOfLuxuryGame }))
+    ),
+  },
+  {
+    slug: rubberDuckMeta.slug,
+    name: rubberDuckMeta.name,
+    description: rubberDuckMeta.description,
+    component: lazy(() =>
+      import("./RubberDuck/RubberDuckGame").then((m) => ({ default: m.RubberDuckGame }))
     ),
   },
 ];

@@ -118,6 +118,25 @@ const TIER_LABELS: Record<TierKey, string> = {
   SILVER_BAR: "Silver Bar (weight only)",
   BRONZE_BAR: "Bronze Bar (weight only)",
   COIN: "Coin (independent scatter chance)",
+  TRIPLE_7: "Triple 7 (weight + direct pay)",
+  DOUBLE_7: "Double 7 (weight + direct pay)",
+  SEVEN: "Seven (weight + direct pay)",
+  GUN: "Water Gun (weight + direct pay)",
+  TOOL: "Tool (weight + direct pay)",
+  SHAMPOO: "Shampoo (weight + direct pay)",
+  TOWEL: "Towel (weight + direct pay)",
+  BRUSH: "Brush (weight + direct pay)",
+  SAFEGUARD: "Safeguard Soap (weight + direct pay)",
+  CAP: "Cap (weight + direct pay)",
+  POT: "Pot (weight + direct pay)",
+  SOAP: "Soap (weight + direct pay)",
+  SPONGE: "Sponge (weight + direct pay)",
+  AVOCADO: "Avocado (loss fruit — weight only)",
+  BANANA: "Banana (loss fruit — weight only)",
+  COCONUT: "Coconut (loss fruit — weight only)",
+  GRAPES: "Grapes (loss fruit — weight only)",
+  LEMON: "Lemon (loss fruit — weight only)",
+  STRAWBERRY: "Strawberry (loss fruit — weight only)",
 };
 
 const SHAMROCK_RULE_LABELS: Record<string, string> = {
@@ -219,6 +238,25 @@ const TIER_IMAGES: Partial<Record<TierKey, string>> = {
   SILVER_BAR: "/symbols/lifeOfLuxury/silverBar.png",
   BRONZE_BAR: "/symbols/lifeOfLuxury/bronzeBar.png",
   COIN: "/symbols/lifeOfLuxury/coin.png",
+  TRIPLE_7: "/symbols/rubberDuck/tripple7.png",
+  DOUBLE_7: "/symbols/rubberDuck/double7.png",
+  SEVEN: "/symbols/rubberDuck/7.png",
+  GUN: "/symbols/rubberDuck/gun.png",
+  TOOL: "/symbols/rubberDuck/tool.png",
+  SHAMPOO: "/symbols/rubberDuck/shampoo.png",
+  TOWEL: "/symbols/rubberDuck/towel.png",
+  BRUSH: "/symbols/rubberDuck/brush.png",
+  SAFEGUARD: "/symbols/rubberDuck/saveGaurd.png",
+  CAP: "/symbols/rubberDuck/cap.png",
+  POT: "/symbols/rubberDuck/pot.png",
+  SOAP: "/symbols/rubberDuck/soap.png",
+  SPONGE: "/symbols/rubberDuck/sponch.png",
+  AVOCADO: "/symbols/rubberDuck/avacado.png",
+  BANANA: "/symbols/rubberDuck/banana.png",
+  COCONUT: "/symbols/rubberDuck/coconut.png",
+  GRAPES: "/symbols/rubberDuck/grapes.png",
+  LEMON: "/symbols/rubberDuck/lemon.png",
+  STRAWBERRY: "/symbols/rubberDuck/strawberry.png",
 };
 
 /** 7 Crystal Clover reuses Sizzling 7s' "BAR"/"DOUBLE_BAR"/"TRIPLE_BAR" tier keys (each game's
@@ -249,6 +287,12 @@ const GAME_TIER_IMAGE_OVERRIDES: Partial<Record<string, Partial<Record<TierKey, 
   // Life of Luxury's own wild (daimond.png), distinct from Crystal Clover/Vegas Hits' artwork.
   "life-of-luxury": {
     WILD: "/symbols/lifeOfLuxury/daimond.png",
+  },
+  // Rubber Duck reuses Life of Luxury's "BOAT" and Sizzling 7s' "BONUS" tier keys, but has its
+  // own distinct artwork for both.
+  "rubber-duck": {
+    BOAT: "/symbols/rubberDuck/boat.png",
+    BONUS: "/symbols/rubberDuck/bonus.png",
   },
 };
 

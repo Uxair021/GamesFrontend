@@ -9,7 +9,8 @@ import crystalCloverThumbnail from "../../public/symbols/crystalClover/thumbnail
 import fruity777Thumbnail from "../../public/symbols/fruity777/thumbnail.png";
 import mega10xPayThumbnail from "../../public/symbols/mega10x/thumbnail.png";
 import vegasHitsThumbnail from "../../public/symbols/vegasHit/thumbnail.png";
-import lifeOfLuxuryThumbnail from "../../public/symbols/lifeOfLuxury/thumbnail.svg";
+import lifeOfLuxuryThumbnail from "../../public/symbols/lifeOfLuxury/thumbnail.png";
+import rubberDuckThumbnail from "../../public/symbols/rubberDuck/thumbnail.png";
 
 const THUMBNAILS: Record<string, string> = {
   "shamrock-spin": shamrockSpinThumbnail,
@@ -23,6 +24,7 @@ const THUMBNAILS: Record<string, string> = {
   "mega-10x-pay": mega10xPayThumbnail,
   "vegas-hits": vegasHitsThumbnail,
   "life-of-luxury": lifeOfLuxuryThumbnail,
+  "rubber-duck": rubberDuckThumbnail,
 };
 
 interface GameCardProps {
