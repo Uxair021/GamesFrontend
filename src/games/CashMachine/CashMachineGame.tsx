@@ -51,8 +51,7 @@ export function CashMachineGame() {
   const [celebration, setCelebration] = useState<{ tier: WinTierName; winAmount: number } | null>(null);
   const [showLoadingScreen, setShowLoadingScreen] = useState(true);
   const [muted, setMuted] = useState(false);
-  const winGlowActiveRef = useRef(false);
-  const winGlowStartRef = useRef(0);
+  const winGlowTimeoutRef = useRef<number | null>(null);
   const autoplayRef = useRef(false);
   const holdTimeoutRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
@@ -124,28 +123,27 @@ export function CashMachineGame() {
     setSpinning(true);
     setWinAmount(0);
 
-    // A previous spin's win glow must stay visible for at least WIN_GLOW_MIN_DISPLAY_MS
-    // before this new spin can clear it, even if the player hits SPIN again immediately.
-    if (winGlowActiveRef.current) {
-      const remaining = WIN_GLOW_MIN_DISPLAY_MS - (Date.now() - winGlowStartRef.current);
-      if (remaining > 0) await new Promise((r) => window.setTimeout(r, remaining));
-      sceneRef.current?.setWinGlow(false);
-      winGlowActiveRef.current = false;
-    }
-    if (!sceneRef.current) return;
+    // Start reel motion immediately — cosmetic filler only, no server result needed yet.
+    // The previous spin's win glow (if still showing) clears itself on its own schedule
+    // (see the setTimeout below) and stops visually the instant a reel starts moving
+    // again anyway, so it never has to block a new spin from starting.
+    sceneRef.current.startSpinUp();
+    sound.startReelSpinLoop();
 
     try {
       const result = await spinRequest(betAmount);
-      sound.startReelSpinLoop();
-      await sceneRef.current.spin(result.symbols, result.activeReels, result.respunIndexes, () => sound.playReelStop());
+      await sceneRef.current.land(result.symbols, result.activeReels, result.respunIndexes, () => sound.playReelStop());
       sound.stopReelSpinLoop();
       setWinAmount(result.winAmount);
       setBalance(result.balance);
 
       if (result.winAmount > 0) {
         sceneRef.current.setWinGlow(true);
-        winGlowActiveRef.current = true;
-        winGlowStartRef.current = Date.now();
+        if (winGlowTimeoutRef.current) window.clearTimeout(winGlowTimeoutRef.current);
+        winGlowTimeoutRef.current = window.setTimeout(() => {
+          sceneRef.current?.setWinGlow(false);
+          winGlowTimeoutRef.current = null;
+        }, WIN_GLOW_MIN_DISPLAY_MS);
       }
 
       if (result.tier) {
@@ -156,6 +154,7 @@ export function CashMachineGame() {
       }
     } catch (err) {
       sound.stopReelSpinLoop();
+      sceneRef.current?.cancelSpinUp();
       const message = err instanceof Error ? err.message : "Spin failed";
       setError(message);
       setAutoplay(false);
@@ -186,6 +185,7 @@ export function CashMachineGame() {
   useEffect(() => {
     return () => {
       if (holdTimeoutRef.current) window.clearTimeout(holdTimeoutRef.current);
+      if (winGlowTimeoutRef.current) window.clearTimeout(winGlowTimeoutRef.current);
     };
   }, []);
 

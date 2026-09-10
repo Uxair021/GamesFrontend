@@ -83,14 +83,37 @@ export class CashMachineScene {
   }
 
   /**
-   * Spins the reels actually in play for this bet tier and lands on `symbols` (length
-   * equals `activeReels`). Reels beyond `activeReels` are dimmed and shown blank — no
-   * spin animation — since lower bet tiers only put reel 1 (then 1-2, then 1-2-3) in
-   * play. Reels in `respunIndexes` get a second, reverse-direction spin after the first
-   * lands (the bonus-respin visual cue). Resolves once every reel (including any
-   * respins) has finished.
+   * Starts every reel currently in play (per the active bet tier) scrolling immediately —
+   * purely cosmetic filler, no server result needed yet. Call this the instant Spin is
+   * pressed, before the spin request is even sent, so reel motion never waits on the
+   * network. Reels beyond the active tier stay static/dimmed, same as today.
    */
-  async spin(
+  startSpinUp(): void {
+    this.reels.forEach((reel, i) => {
+      if (i >= this.activeReelCount) return;
+      reel.startContinuousSpin();
+    });
+  }
+
+  /** Cancels an in-flight spin-up (e.g. the spin request failed/timed out) and settles
+   * every in-play reel to an idle frame instead of leaving it spinning forever. */
+  cancelSpinUp(): void {
+    this.reels.forEach((reel, i) => {
+      if (i >= this.activeReelCount) return;
+      reel.stopToIdle();
+    });
+  }
+
+  /**
+   * Lands the reels actually in play for this bet tier on `symbols` (length equals
+   * `activeReels`) — each reel picks up from wherever `startSpinUp` left it scrolling
+   * (or from a static frame, if it was never started). Reels beyond `activeReels` are
+   * dimmed and shown blank — no spin animation — since lower bet tiers only put reel 1
+   * (then 1-2, then 1-2-3) in play. Reels in `respunIndexes` get a second,
+   * reverse-direction spin after the first lands (the bonus-respin visual cue). Resolves
+   * once every reel (including any respins) has finished.
+   */
+  async land(
     symbols: CashSymbol[],
     activeReels: number,
     respunIndexes: number[],
@@ -100,6 +123,7 @@ export class CashMachineScene {
     const respunSet = new Set(respunIndexes);
     const firstPass = this.reels.map((reel, i) => {
       if (i >= activeReels) {
+        reel.stopToIdle();
         reel.setDimmed(true);
         reel.showStatic("null");
         return Promise.resolve();
@@ -108,14 +132,14 @@ export class CashMachineScene {
       // A respun reel was "null" before the respin (that's the only trigger condition on
       // the backend) — land the first pass on that, and the *final* value in the reverse pass.
       const firstTarget = respunSet.has(i) ? "null" : symbols[i];
-      return reel.spinTo(firstTarget, 900 + i * 350, i * 150).then(() => onReelLand?.(i));
+      return reel.landOn(firstTarget, 900 + i * 350, 0).then(() => onReelLand?.(i));
     });
     await Promise.all(firstPass);
 
     if (respunIndexes.length === 0) return;
 
     const respinPass = respunIndexes.map((i, order) =>
-      this.reels[i].spinTo(symbols[i], 700, order * 150, true).then(() => onReelLand?.(i))
+      this.reels[i].landOn(symbols[i], 700, order * 150, true).then(() => onReelLand?.(i))
     );
     await Promise.all(respinPass);
   }

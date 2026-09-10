@@ -4,6 +4,9 @@ import { CashSymbol } from "../api";
 const FILLER_COUNT = 14;
 const SYMBOL_PADDING = 60;
 const GLOW_PULSE_PERIOD_MS = 520;
+const IDLE_SPEED_CELLS_PER_MS = 0.006;
+const IDLE_BUFFER_CELLS = 6;
+const IDLE_PRUNE_CELLS_BEHIND = 3;
 
 function lerpColor(from: number, to: number, t: number): number {
   const r1 = (from >> 16) & 0xff;
@@ -24,6 +27,13 @@ function lerpColor(from: number, to: number, t: number): number {
  * ShamrockSpin's Reel.ts (Container.removeChildren() doesn't preserve insertion order in
  * this Pixi version — see that file's history), plus a reverse-direction spin for the
  * bonus respin (0 + null trigger), and a green (not amber) win-glow pulse.
+ *
+ * Spinning is split into two phases so reel motion never has to wait on the network:
+ * `startContinuousSpin` begins an unbounded idle scroll the instant Spin is pressed
+ * (cosmetic filler only, no real result needed yet), and `landOn` — called once the
+ * server result is known — takes over the same strip mid-motion and decelerates onto
+ * the real target. Continues scrolling from whatever is currently displayed either way,
+ * so there's never a jump/flash.
  */
 export class CashReel {
   public readonly container: Container;
@@ -35,6 +45,7 @@ export class CashReel {
   private visibleCell: Container | null = null;
   private glowGraphics: Container | null = null;
   private glowRafId: number | null = null;
+  private continuousRafId: number | null = null;
 
   constructor(
     textures: Record<CashSymbol, Texture>,
@@ -79,7 +90,17 @@ export class CashReel {
     return cells;
   }
 
+  /** Cancels an in-flight `startContinuousSpin` loop, if any — called at the top of every
+   * method that takes over or resets the strip, so callers never have to remember to. */
+  private cancelContinuousSpin(): void {
+    if (this.continuousRafId !== null) {
+      cancelAnimationFrame(this.continuousRafId);
+      this.continuousRafId = null;
+    }
+  }
+
   showStatic(target: CashSymbol): void {
+    this.cancelContinuousSpin();
     this.stopWinGlow();
     this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.cellCount = 0;
@@ -93,12 +114,56 @@ export class CashReel {
   }
 
   /**
-   * Spins and lands on `target`. Continues scrolling from whatever is currently
-   * displayed (no jump/flash at the start). When `reverse` is true (the bonus-respin
-   * path), the filler/target cells are appended *before* the existing content and the
-   * whole strip scrolls downward instead of upward, as a distinct visual cue.
+   * Begins an unbounded idle scroll — purely cosmetic filler, no real result needed —
+   * and keeps going until `landOn` or `stopToIdle` is called. Continues from whatever's
+   * currently displayed, same as a normal spin. Call this the instant Spin is pressed,
+   * before the server round-trip even starts.
    */
-  spinTo(target: CashSymbol, duration: number, delay: number, reverse = false): Promise<void> {
+  startContinuousSpin(): void {
+    this.cancelContinuousSpin();
+    this.stopWinGlow();
+    if (this.cellCount === 0) {
+      this.appendCells([this.randomSymbol()]);
+    }
+
+    const idleSpeed = this.cellHeight * IDLE_SPEED_CELLS_PER_MS;
+    const bufferPx = this.cellHeight * IDLE_BUFFER_CELLS;
+    const startY = this.container.y;
+    const start = performance.now();
+
+    let rafId = 0;
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      this.container.y = startY - idleSpeed * elapsed;
+
+      // Keep enough filler ahead of the current scroll position that we never run out.
+      while (this.cellCount * this.cellHeight + this.container.y < bufferPx) {
+        this.appendCells([this.randomSymbol()]);
+      }
+      // Prune cells that have fully scrolled past, so the strip doesn't grow unbounded.
+      const pruneBelowWorldY = -this.cellHeight * IDLE_PRUNE_CELLS_BEHIND;
+      this.container.children
+        .filter((c) => c.y + this.container.y < pruneBelowWorldY)
+        .forEach((c) => {
+          this.container.removeChild(c);
+          c.destroy({ children: true });
+        });
+
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    this.continuousRafId = rafId;
+  }
+
+  /**
+   * Lands on `target`. Continues scrolling from whatever is currently displayed (no
+   * jump/flash), whether that's a static frame or a reel still mid `startContinuousSpin`.
+   * When `reverse` is true (the bonus-respin path), the filler/target cells are appended
+   * *before* the existing content and the whole strip scrolls downward instead of upward,
+   * as a distinct visual cue.
+   */
+  landOn(target: CashSymbol, duration: number, delay: number, reverse = false): Promise<void> {
+    this.cancelContinuousSpin();
     this.stopWinGlow();
     if (this.cellCount === 0) {
       this.appendCells([this.randomSymbol()]);
@@ -155,6 +220,13 @@ export class CashReel {
     });
   }
 
+  /** Cancels an idle continuous spin and settles immediately on a random symbol — used
+   * when a spin request fails/times out and the reel needs to stop without a real result. */
+  stopToIdle(): void {
+    this.cancelContinuousSpin();
+    this.showStatic(this.randomSymbol());
+  }
+
   /** Destroys every cell except `keep`, recoordinates it to y=0, resets container.y=0. */
   private keepOnly(keep: Container): void {
     const toRemove = this.container.children.filter((c) => c !== keep);
@@ -209,6 +281,7 @@ export class CashReel {
   }
 
   destroy(): void {
+    this.cancelContinuousSpin();
     this.stopWinGlow();
     this.pendingTimeouts.forEach((id) => window.clearTimeout(id));
     this.pendingFrames.forEach((cancel) => cancel());
