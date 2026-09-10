@@ -7,6 +7,12 @@ const REEL_COUNT = 3;
 const VISIBLE_ROWS = 3;
 const COLUMN_GAP = 25;
 
+/** Multiplies every reel's landing duration in spin() (on top of the existing turbo
+ * multiplier) — < 1 makes the whole spin snappier, > 1 makes it last longer, without
+ * changing anything about how a spin plays out (same stagger, same easing, same turbo
+ * behavior). */
+const SPIN_SPEED_MULTIPLIER = 1.3;
+
 // Fractional position of the reel window within bg.png (1672x941 source art) — the three
 // white boxes under the "BUFFALO 777" title. First-pass estimate; tune by eye as needed.
 const WINDOW_LEFT_FRAC = 0.239;
@@ -156,7 +162,7 @@ export class Buffalo777Scene {
     onReelLand?: (index: number) => void,
     turbo = false
   ): Promise<void> {
-    const speed = turbo ? 0.4 : 1;
+    const speed = (turbo ? 0.4 : 1) * SPIN_SPEED_MULTIPLIER;
     const spins = this.reels.map((reel, i) =>
       reel.spinTo(reelsResult[i], (900 + i * 350) * speed, 0).then(() => onReelLand?.(i))
     );

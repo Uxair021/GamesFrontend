@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
 import { Buffalo777Scene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/Buffalo777Scene";
-import { getBuffalo777Config, spinRequest, Buffalo777ConfigResponse, PayoutRow } from "./api";
+import { getBuffalo777Config, spinRequest, reserveSpinRequest, Buffalo777ConfigResponse, PayoutRow } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { useFitScale } from "../shared/useFitScale";
@@ -70,6 +70,7 @@ export function Buffalo777Game() {
   const [turbo, setTurbo] = useState(false);
   const winGlowActiveRef = useRef(false);
   const winGlowStartRef = useRef(0);
+  const reservePrefetchTimeoutRef = useRef<number | null>(null);
 
   const betAmount = betLevels[betIndex] ?? betLevels[0];
 
@@ -178,6 +179,11 @@ export function Buffalo777Game() {
       setAutoplay(false);
     } finally {
       setSpinning(false);
+      // Pre-fetch the next spin's result right away, at whatever bet was just played —
+      // maximizes the window before the player's next click. Fire-and-forget: a
+      // failed/slow reservation just means the next spin falls back to a live request,
+      // exactly like today.
+      reserveSpinRequest(betAmount).catch(() => {});
     }
   }, [betAmount, spinning, user, setBalance, turbo]);
 
@@ -193,6 +199,21 @@ export function Buffalo777Game() {
   useEffect(() => {
     if (!ready || !config || !sceneRef.current) return;
     sceneRef.current.updatePayoutValues(config.paytable, betAmount);
+  }, [ready, config, betAmount]);
+
+  // Pre-fetch the next spin's result whenever the bet changes (and once on load) —
+  // debounced so rapid +/- clicking doesn't spam the reserve endpoint. Purely a
+  // background optimization; see reserveSpinRequest's doc comment.
+  useEffect(() => {
+    if (!ready || !config) return;
+    if (reservePrefetchTimeoutRef.current) window.clearTimeout(reservePrefetchTimeoutRef.current);
+    reservePrefetchTimeoutRef.current = window.setTimeout(() => {
+      reservePrefetchTimeoutRef.current = null;
+      reserveSpinRequest(betAmount).catch(() => {});
+    }, 300);
+    return () => {
+      if (reservePrefetchTimeoutRef.current) window.clearTimeout(reservePrefetchTimeoutRef.current);
+    };
   }, [ready, config, betAmount]);
 
   const changeBet = (direction: 1 | -1) => {

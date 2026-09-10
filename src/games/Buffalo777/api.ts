@@ -42,6 +42,16 @@ export async function spinRequest(betAmount: number): Promise<SpinResponse> {
   return data;
 }
 
+/** Asks the server to pre-compute and hold the next spin's result for this bet amount, so
+ * a spin placed soon after can redeem it instantly instead of waiting on a fresh RNG
+ * round-trip — see the backend's `/spin/reserve` route. Purely a background optimization:
+ * the outcome itself is never returned here, and a failed/slow reservation just means the
+ * next spin falls back to today's live behavior, so callers should treat this as
+ * fire-and-forget and swallow errors. */
+export async function reserveSpinRequest(betAmount: number): Promise<void> {
+  await apiClient.post("/api/games/buffalo-777/spin/reserve", { betAmount });
+}
+
 export async function getBuffalo777Config(): Promise<Buffalo777ConfigResponse> {
   const { data } = await apiClient.get<Buffalo777ConfigResponse>("/api/games/buffalo-777/config");
   return data;

@@ -15,8 +15,13 @@ export class Reel {
   private fillerPool: BuffaloSymbol[];
   private pendingTimeouts: number[] = [];
   private pendingFrames: Array<() => void> = [];
-  /** Number of cells currently appended, so a new spin knows where (what y) to append next. */
-  private cellCount = 0;
+  /**
+   * y-index (in cellHeight units) the *next* prepended cell will take — always decreases
+   * (more negative) with each prepend, so new cells stack above whatever's already there.
+   * Reset to 0 by keepOnly()/showStatic() after every spin settles, so this never drifts to
+   * an ever-larger magnitude across many spins.
+   */
+  private nextSlotAbove = 0;
   /** [above, middle, below] cells currently on screen — middle is the scored payline symbol. */
   private visibleCells: Container[] = [];
   private glowGraphics: Container | null = null;
@@ -59,14 +64,20 @@ export class Reel {
     return cell;
   }
 
-  /** Appends cells and returns direct references to them — never rely on container.children order afterwards (see keepOnly). */
-  private appendCells(symbols: BuffaloSymbol[]): Container[] {
+  /** Appends cells *above* whatever's currently on screen — each successive symbol in
+   * `symbols` gets placed one slot higher (more negative y) than the last, continuing on
+   * from `nextSlotAbove`. As `container.y` eases downward (more positive) toward its
+   * resting value, this newly-placed stack (and the old stack sitting below it, at
+   * less-negative/positive y) both slide downward on screen — new symbols enter from the
+   * top, old ones exit at the bottom. Returns direct references — never rely on
+   * container.children order afterwards (see keepOnly). */
+  private prependCells(symbols: BuffaloSymbol[]): Container[] {
     const cells: Container[] = [];
     symbols.forEach((sym) => {
+      this.nextSlotAbove -= 1;
       const cell = this.buildCell(sym);
-      cell.y = this.cellCount * this.cellHeight;
+      cell.y = this.nextSlotAbove * this.cellHeight;
       this.container.addChild(cell);
-      this.cellCount++;
       cells.push(cell);
     });
     return cells;
@@ -76,31 +87,42 @@ export class Reel {
   showStatic(target: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol]): void {
     this.stopWinGlow();
     this.container.removeChildren().forEach((c) => c.destroy({ children: true }));
-    this.cellCount = 0;
     this.container.y = 0;
-    this.visibleCells = this.appendCells(target);
+    this.nextSlotAbove = 0;
+    const cells = target.map((sym, i) => {
+      const cell = this.buildCell(sym);
+      cell.y = i * this.cellHeight;
+      this.container.addChild(cell);
+      return cell;
+    });
+    this.visibleCells = cells;
   }
 
   /**
-   * Spins and lands exactly on `target` (above/middle/below on the payline). Continues
-   * scrolling from whatever is currently displayed — filler + target are appended after
-   * the existing cells rather than replacing them, so there's no jump/flash at the start.
+   * Spins and lands exactly on `target` (above/middle/below on the payline), scrolling
+   * top-to-bottom — new symbols fall into place from above the visible window, existing
+   * ones continue down and out the bottom. Continues from whatever's currently displayed
+   * (filler + target prepended above the existing cells, never a jump/flash at the start).
    */
   spinTo(target: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol], duration: number, delay: number): Promise<void> {
     this.stopWinGlow();
-    if (this.cellCount === 0) {
+    if (this.visibleCells.length === 0) {
       // Nothing on screen yet (first render) — seed with a static frame to continue from.
-      this.appendCells([this.randomSymbol(), this.randomSymbol(), this.randomSymbol()]);
+      this.showStatic([this.randomSymbol(), this.randomSymbol(), this.randomSymbol()]);
     }
 
     const startY = this.container.y;
     const filler: BuffaloSymbol[] = Array.from({ length: FILLER_COUNT }, () => this.randomSymbol());
-    const appended = this.appendCells([...filler, ...target]);
-    // Direct references to the 3 landing cells — captured now, not inferred later from
-    // array position (Container.removeChildren() does not preserve insertion order here).
-    const targetCells = appended.slice(-target.length);
+    // Prepend order matters: filler first (ends up *below* the target, closer to the old
+    // stack — passes through the window first), then target BELOW->MIDDLE->ABOVE last, so
+    // "above" ends up the most-negative (topmost) of the three, per prependCells' contract.
+    this.prependCells(filler);
+    const targetCells = this.prependCells([target[2], target[1], target[0]]).reverse(); // -> [above, middle, below]
 
-    const finalY = startY - (filler.length + target.length) * this.cellHeight;
+    // After both prepend calls above, `nextSlotAbove` is exactly the "above" target cell's
+    // slot index (it was the very last decrement applied) — landing it at window-local y=0
+    // means the container must shift by the negation of that.
+    const finalY = -this.nextSlotAbove * this.cellHeight;
 
     return new Promise((resolve) => {
       let rafId = 0;
@@ -110,7 +132,10 @@ export class Reel {
           // Clamped to >=0 — see WinCelebration.tsx for why requestAnimationFrame's
           // timestamp can otherwise come in marginally before `start`.
           const t = Math.min(Math.max((now - start) / duration, 0), 1);
-          const eased = 1 - Math.pow(1 - t, 3);
+          // Ease-in-out (smoothly accelerates from a standstill, then smoothly decelerates
+          // into the landing) instead of a flat-out ease-out — the reel now ramps up to
+          // speed at the start of every spin instead of snapping straight to full speed.
+          const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
           this.container.y = startY + (finalY - startY) * eased;
           if (t < 1) {
             rafId = requestAnimationFrame(tick);
@@ -138,7 +163,7 @@ export class Reel {
     keep.forEach((cell, i) => {
       cell.y = i * this.cellHeight;
     });
-    this.cellCount = keep.length;
+    this.nextSlotAbove = 0;
     this.container.y = 0;
     this.visibleCells = keep;
   }
