@@ -6,7 +6,7 @@ export function Navbar() {
   const { user, logout } = useAuth();
 
   return (
-    <nav className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-6 py-3">
+    <nav className="flex items-center justify-between border-b border-slate-800 bg-[#163049] px-6 py-3">
       <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-wide text-white">
         <Clover size={20} className="text-amber-400" />
         Texas Slots

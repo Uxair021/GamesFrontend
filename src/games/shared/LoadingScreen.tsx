@@ -61,7 +61,7 @@ export function LoadingScreen({ title, ready, onDone }: LoadingScreenProps) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-end overflow-hidden bg-slate-950">
       <img
-        src="/images/loadingPage.png"
+        src="/images/loadingPage.webp"
         alt=""
         className="absolute inset-0 h-full w-full object-cover"
         style={{ objectPosition: "center 30%" }}

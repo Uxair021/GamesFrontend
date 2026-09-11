@@ -25,6 +25,9 @@ const AdminForceOutcomePage = lazy(() =>
   import("./admin/AdminForceOutcomePage").then((m) => ({ default: m.AdminForceOutcomePage }))
 );
 const AdminRtpPage = lazy(() => import("./admin/AdminRtpPage").then((m) => ({ default: m.AdminRtpPage })));
+const AdminBuffaloRtpPage = lazy(() =>
+  import("./admin/AdminBuffaloRtpPage").then((m) => ({ default: m.AdminBuffaloRtpPage }))
+);
 const AdminLiveFeedPage = lazy(() =>
   import("./admin/AdminLiveFeedPage").then((m) => ({ default: m.AdminLiveFeedPage }))
 );
@@ -116,6 +119,14 @@ function AppShell() {
               element={
                 <Suspense fallback={<AdminFallback />}>
                   <AdminRtpPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="buffalo-rtp"
+              element={
+                <Suspense fallback={<AdminFallback />}>
+                  <AdminBuffaloRtpPage />
                 </Suspense>
               }
             />

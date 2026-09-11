@@ -15,8 +15,8 @@ export function AdminLiveFeedPage() {
         title="Live Feed"
         description="Every spin across every player, streamed in real time."
         actions={
-          <span className={`flex items-center gap-1.5 text-xs ${connected ? "text-emerald-400" : "text-slate-500"}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-slate-600"}`} />
+          <span className={`flex items-center gap-1.5 text-xs ${connected ? "text-emerald-600" : "text-slate-500"}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-400"}`} />
             {connected ? "live" : "connecting..."}
           </span>
         }
@@ -28,12 +28,12 @@ export function AdminLiveFeedPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by username..."
-          className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white placeholder:text-slate-500"
+          className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 placeholder:text-slate-400"
         />
         <select
           value={gameFilter}
           onChange={(e) => setGameFilter(e.target.value)}
-          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800"
         >
           <option value="all">All games</option>
           {gameRegistry.map((g) => (
@@ -45,9 +45,9 @@ export function AdminLiveFeedPage() {
         {loading && <span className="text-xs text-slate-500">Searching...</span>}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-sm">
-          <thead className="bg-slate-900 text-left text-slate-500">
+          <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Game</th>
@@ -58,25 +58,25 @@ export function AdminLiveFeedPage() {
               <th className="px-3 py-2">Time</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-white">
             {spins.map((s, i) => (
-              <tr key={i} className="border-t border-slate-800 hover:bg-slate-900/80">
-                <td className="px-3 py-2 text-slate-300">
+              <tr key={i} className="border-t border-slate-200 even:bg-slate-50 hover:bg-sky-50">
+                <td className="px-3 py-2 text-slate-700">
                   {s.username || s.userId}
-                  {s.forced && <span className="ml-2 text-xs text-indigo-400">forced</span>}
+                  {s.forced && <span className="ml-2 text-xs text-indigo-600">forced</span>}
                 </td>
-                <td className="px-3 py-2 text-slate-400">
+                <td className="px-3 py-2 text-slate-500">
                   {gameRegistry.find((g) => g.slug === s.gameId)?.name ?? s.gameId}
                 </td>
-                <td className="px-3 py-2 text-slate-400">{formatBalance(s.bet)}</td>
-                <td className={`px-3 py-2 ${s.winAmount > 0 ? "text-emerald-400" : "text-slate-500"}`}>
+                <td className="px-3 py-2 text-slate-500">{formatBalance(s.bet)}</td>
+                <td className={`px-3 py-2 ${s.winAmount > 0 ? "text-emerald-600" : "text-slate-500"}`}>
                   {s.winAmount > 0 ? `+${formatBalance(s.winAmount)}` : "-"}
                 </td>
-                <td className="px-3 py-2 text-amber-400">{s.tier ?? "-"}</td>
-                <td className="px-3 py-2 text-slate-400">{formatBalance(s.balanceAfter)}</td>
+                <td className="px-3 py-2 text-amber-600">{s.tier ?? "-"}</td>
+                <td className="px-3 py-2 text-slate-500">{formatBalance(s.balanceAfter)}</td>
                 <td className="px-3 py-2 text-xs text-slate-500">
                   <div>{formatDateTime(s.createdAt)}</div>
-                  <div className="text-slate-600">{formatRelativeTime(s.createdAt)}</div>
+                  <div className="text-slate-400">{formatRelativeTime(s.createdAt)}</div>
                 </td>
               </tr>
             ))}

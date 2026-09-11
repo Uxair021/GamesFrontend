@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
 import { Buffalo777Scene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/Buffalo777Scene";
-import { getBuffalo777Config, spinRequest, Buffalo777ConfigResponse, PayoutRow } from "./api";
+import { getBuffalo777Config, spinRequest, logSpinResult, Buffalo777ConfigResponse, PayoutRow } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { useFitScale } from "../shared/useFitScale";
@@ -156,7 +156,18 @@ export function Buffalo777Game() {
       setWinAmount(result.winAmount);
       // Buffalo777 is a fully offline test game — there's no server balance to read back, so
       // this mirrors the same deduct-bet-then-credit-win math the backend used to do.
-      setBalance(Math.round(((user?.balance ?? 0) - betAmount + result.winAmount) * 100) / 100);
+      const newBalance = Math.round(((user?.balance ?? 0) - betAmount + result.winAmount) * 100) / 100;
+      setBalance(newBalance);
+
+      // Fire-and-forget — purely a record-keeping log alongside every other game's spin
+      // history, never awaited and never allowed to affect gameplay if it fails/is slow.
+      logSpinResult({
+        betAmount,
+        winAmount: result.winAmount,
+        reelSymbols: result.reels,
+        balanceAfter: newBalance,
+        tier: result.tier,
+      }).catch(() => {});
 
       if (result.winAmount > 0) {
         sceneRef.current.setWinGlow(true);

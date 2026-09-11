@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { adminApi, SpinEntry } from "./adminApi";
+import { resolveApiBaseUrl } from "../api/client";
+
+const RECONNECT_DELAY_MS = 1500;
 
 export interface LiveSpinEvent {
   userId: string;
@@ -81,27 +84,44 @@ export function useLiveSpinFeed(filter: LiveSpinFilter = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter.username, filter.gameId]);
 
-  // Single long-lived SSE connection for the page's lifetime, independent of the active filter.
+  // Long-lived SSE connection for the page's lifetime, independent of the active filter.
+  // SSE auth tickets are short-lived and single-use (see backEnd/src/utils/sseTicket.ts), so
+  // if this connection ever drops, the browser's native EventSource retry (same URL, same
+  // already-consumed ticket) can never succeed on its own — a fresh ticket + a brand new
+  // EventSource is required. `connect()` below is what actually makes this reconnect instead
+  // of silently going stale until the admin manually reloads the page.
   useEffect(() => {
     let cancelled = false;
+    let reconnectId: number | null = null;
 
-    adminApi.getSseTicket().then((ticket) => {
+    const connect = () => {
       if (cancelled) return;
-      const url = `${import.meta.env.VITE_API_URL}/api/admin/events?ticket=${encodeURIComponent(ticket)}`;
-      const source = new EventSource(url);
-      sourceRef.current = source;
+      adminApi.getSseTicket().then((ticket) => {
+        if (cancelled) return;
+        const url = `${resolveApiBaseUrl()}/api/admin/events?ticket=${encodeURIComponent(ticket)}`;
+        const source = new EventSource(url);
+        sourceRef.current = source;
 
-      source.onopen = () => setConnected(true);
-      source.onerror = () => setConnected(false);
-      source.addEventListener("spin", (event) => {
-        const payload = JSON.parse((event as MessageEvent).data) as LiveSpinEvent;
-        if (!matchesFilter(payload, filterRef.current)) return;
-        setSpins((prev) => [payload, ...prev].slice(0, MAX_ENTRIES));
+        source.onopen = () => setConnected(true);
+        source.onerror = () => {
+          setConnected(false);
+          source.close();
+          if (sourceRef.current === source) sourceRef.current = null;
+          if (!cancelled) reconnectId = window.setTimeout(connect, RECONNECT_DELAY_MS);
+        };
+        source.addEventListener("spin", (event) => {
+          const payload = JSON.parse((event as MessageEvent).data) as LiveSpinEvent;
+          if (!matchesFilter(payload, filterRef.current)) return;
+          setSpins((prev) => [payload, ...prev].slice(0, MAX_ENTRIES));
+        });
       });
-    });
+    };
+
+    connect();
 
     return () => {
       cancelled = true;
+      if (reconnectId !== null) window.clearTimeout(reconnectId);
       sourceRef.current?.close();
       sourceRef.current = null;
     };

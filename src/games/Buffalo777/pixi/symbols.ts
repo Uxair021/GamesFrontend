@@ -5,17 +5,17 @@ import { BuffaloSymbol } from "../api";
 const ASSET_BASE = "/symbols/buffalo777";
 
 const SYMBOL_FILES: Record<BuffaloSymbol, string> = {
-  TEN: "10.png",
-  JACK: "J.png",
-  QUEEN: "Q.png",
-  KING: "K.png",
-  ACE: "A.png",
-  BULL: "bull.png",
-  SINGLE_BAR: "SingleBar.png",
-  DOUBLE_BAR: "DoubleBar.png",
-  TRIPLE_BAR: "TripleBar.png",
-  MONEY_BAG: "MoneyBag.png",
-  COIN: "Coin.png",
+  TEN: "10.webp",
+  JACK: "J.webp",
+  QUEEN: "Q.webp",
+  KING: "K.webp",
+  ACE: "A.webp",
+  BULL: "bull.webp",
+  SINGLE_BAR: "SingleBar.webp",
+  DOUBLE_BAR: "DoubleBar.webp",
+  TRIPLE_BAR: "TripleBar.webp",
+  MONEY_BAG: "MoneyBag.webp",
+  COIN: "Coin.webp",
 };
 
 /** Symbols with a bonus win animation — plays in place of the static image on the payline
@@ -70,7 +70,7 @@ export async function loadSymbolTextures(): Promise<Record<BuffaloSymbol, Textur
 }
 
 export async function loadBackgroundTexture(): Promise<Texture> {
-  const img = await loadImage(`${ASSET_BASE}/bg.png`);
+  const img = await loadImage(`${ASSET_BASE}/bg.webp`);
   return Texture.from(img);
 }
 

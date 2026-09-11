@@ -328,8 +328,8 @@ const LINE_COST_BY_GAME: Partial<Record<string, number>> = {
 };
 
 function inputClass(invalid = false): string {
-  return `w-24 rounded-lg border bg-slate-950 px-2 py-1.5 text-sm text-white ${
-    invalid ? "border-rose-500" : "border-slate-700"
+  return `w-24 rounded-lg border bg-white px-2 py-1.5 text-sm text-slate-800 ${
+    invalid ? "border-rose-500" : "border-slate-300"
   }`;
 }
 
@@ -587,13 +587,13 @@ export function AdminRtpPage() {
         description="Set exact odds and payouts per outcome tier — this is the RTP control for both games now."
       />
 
-      <div className="mb-4 flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1 max-w-7xl">
+      <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-white p-1 max-w-7xl">
         {gameRegistry.map((g) => (
           <button
             key={g.slug}
             onClick={() => setGameId(g.slug)}
             className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              gameId === g.slug ? "bg-indigo-500 text-white" : "text-slate-400 hover:text-white"
+              gameId === g.slug ? "bg-indigo-500 text-white" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             {g.name}
@@ -605,9 +605,9 @@ export function AdminRtpPage() {
         <div className="text-sm text-slate-500">Loading...</div>
       ) : (
         <div className="max-w-3xl space-y-5">
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex items-center gap-3">
-              <label className="text-sm font-semibold text-white">Target RTP %</label>
+              <label className="text-sm font-semibold text-slate-800">Target RTP %</label>
               <input
                 type="number"
                 step="0.01"
@@ -616,29 +616,29 @@ export function AdminRtpPage() {
                 disabled={solving}
                 className={inputClass(!rtpValid)}
               />
-              <div className={`text-sm font-medium ${rtpValid ? "text-emerald-400" : "text-rose-400"}`}>
+              <div className={`text-sm font-medium ${rtpValid ? "text-emerald-600" : "text-rose-600"}`}>
                 Effective RTP: {computedRtp.toFixed(2)}%
                 {rtpValid ? " ✓" : ""}
               </div>
-              {solving && <div className="text-sm font-medium text-slate-400">Solving...</div>}
+              {solving && <div className="text-sm font-medium text-slate-500">Solving...</div>}
             </div>
 
             {!frequencyValid && (
-              <p className="mt-3 text-sm text-rose-400">
+              <p className="mt-3 text-sm text-rose-600">
                 Frequencies must sum to 100% — currently {frequencySum.toFixed(2)}%.
               </p>
             )}
             {frequencyValid && !rtpValid && (
-              <p className="mt-3 text-sm text-rose-400">
+              <p className="mt-3 text-sm text-rose-600">
                 Computed RTP ({computedRtp.toFixed(2)}%) doesn't match the target ({config.targetRtpPercent.toFixed(2)}%,
                 ±0.5%). Adjust frequencies or payout multipliers below.
               </p>
             )}
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-left text-slate-500">
+              <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
                 <tr>
                   <th className="px-3 py-2">Outcome</th>
                   <th className="px-3 py-2">Frequency %</th>
@@ -648,11 +648,11 @@ export function AdminRtpPage() {
               </thead>
               <tbody>
                 {config.tiers.map((tier) => (
-                  <tr key={tier.key} className="border-t border-slate-800">
-                    <td className="px-3 py-2 font-medium text-white">
+                  <tr key={tier.key} className="border-t border-slate-200">
+                    <td className="px-3 py-2 font-medium text-slate-800">
                       <div className="flex items-center gap-2">
                         {tierImage(config.gameId, tier.key) && (
-                          <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                          <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-100" />
                         )}
                         {TIER_LABELS[tier.key]}
                       </div>
@@ -715,9 +715,9 @@ export function AdminRtpPage() {
           </div>
 
           {simStats && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center gap-3">
-                <label className="text-sm font-semibold text-white">Target Loss %</label>
+                <label className="text-sm font-semibold text-slate-800">Target Loss %</label>
                 <input
                   type="number"
                   step="0.01"
@@ -726,11 +726,11 @@ export function AdminRtpPage() {
                   disabled={solving}
                   className={inputClass(!lossValid)}
                 />
-                <div className={`text-sm font-medium ${lossValid ? "text-emerald-400" : "text-rose-400"}`}>
+                <div className={`text-sm font-medium ${lossValid ? "text-emerald-600" : "text-rose-600"}`}>
                   Effective Loss: {simStats.lossPercent.toFixed(2)}%
                   {lossValid ? " ✓" : ""}
                 </div>
-                {solving && <div className="text-sm font-medium text-slate-400">Solving...</div>}
+                {solving && <div className="text-sm font-medium text-slate-500">Solving...</div>}
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 Percent of base spins (the outcomes above, not free games) that pay nothing at all — editing this
@@ -738,7 +738,7 @@ export function AdminRtpPage() {
                 payout value.
               </p>
               {!lossValid && (
-                <p className="mt-2 text-xs text-rose-400">
+                <p className="mt-2 text-xs text-rose-600">
                   {gameId === "vegas-hits"
                     ? "Vegas Hits' overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."
                     : "Sizzling 7s' 27 fully-overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."}
@@ -747,8 +747,8 @@ export function AdminRtpPage() {
             </div>
           )}
 
-          <details className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <summary className="cursor-pointer text-sm font-semibold text-white">
+          <details className="rounded-xl border border-slate-200 bg-white p-5">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
               Which celebration each win shows (cosmetic only — payout comes from the table above)
             </summary>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -756,16 +756,16 @@ export function AdminRtpPage() {
                 .filter((t) => t.payoutMultiplier !== null)
                 .map((tier) => (
                   <div key={tier.key} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="flex items-center gap-2 text-slate-300">
+                    <span className="flex items-center gap-2 text-slate-600">
                       {tierImage(config.gameId, tier.key) && (
-                        <img src={tierImage(config.gameId, tier.key)} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
+                        <img src={tierImage(config.gameId, tier.key)} alt="" className="h-6 w-6 rounded object-contain bg-slate-100" />
                       )}
                       {TIER_LABELS[tier.key]}
                     </span>
                     <select
                       value={config.celebrationMap?.[tier.key] ?? ""}
                       onChange={(e) => updateCelebration(tier.key, (e.target.value || null) as CelebrationTier | null)}
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"
                     >
                       {CELEBRATION_OPTIONS.map((opt) => (
                         <option key={opt.label} value={opt.value ?? ""}>
@@ -779,8 +779,8 @@ export function AdminRtpPage() {
           </details>
 
           {hasFreeSpin && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <label className="text-sm font-semibold text-white">Free spins granted</label>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <label className="text-sm font-semibold text-slate-800">Free spins granted</label>
               <p className="mt-1 text-xs text-slate-500">
                 Bonus spins awarded when the "Free Spin" tier hits. Each bonus spin independently rolls its own
                 outcome using the frequencies above (with the free-spin payout column).
@@ -796,8 +796,8 @@ export function AdminRtpPage() {
           )}
 
           {config.ruleTierMap && (
-            <details className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-white">
+            <details className="rounded-xl border border-slate-200 bg-white p-5">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-800">
                 Which symbols render for each tier (cosmetic only — payout comes from the table above)
               </summary>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -806,9 +806,9 @@ export function AdminRtpPage() {
                   const ruleLabels = config.gameId === "crystal-clover" ? CRYSTAL_CLOVER_RULE_LABELS : SHAMROCK_RULE_LABELS;
                   return (
                   <div key={ruleId} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="flex items-center gap-2 text-slate-300">
+                    <span className="flex items-center gap-2 text-slate-600">
                       {ruleImages[ruleId] && (
-                        <img src={ruleImages[ruleId]} alt="" className="h-6 w-6 rounded object-contain bg-slate-800" />
+                        <img src={ruleImages[ruleId]} alt="" className="h-6 w-6 rounded object-contain bg-slate-100" />
                       )}
                       {ruleLabels[ruleId] ?? ruleId}
                     </span>
@@ -820,7 +820,7 @@ export function AdminRtpPage() {
                           ruleTierMap: { ...config.ruleTierMap, [ruleId]: e.target.value },
                         })
                       }
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"
                     >
                       {WIN_TIER_KEYS.map((k) => (
                         <option key={k} value={k}>
@@ -836,8 +836,8 @@ export function AdminRtpPage() {
           )}
 
           {config.amountThresholds && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">
                 {config.gameId === "cash-machine" ? "Amount thresholds" : "Celebration thresholds"}
               </div>
               <p className="mt-1 text-xs text-slate-500">
@@ -882,8 +882,8 @@ export function AdminRtpPage() {
           )}
 
           {config.specialReelTiers && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">
                 {config.gameId === "5x-rewind"
                   ? "Coin overlay (rolled per reel)"
                   : config.gameId === "crystal-clover"
@@ -898,13 +898,13 @@ export function AdminRtpPage() {
                     : "Fully independent from the table above — this is reel 4's own odds and effects, applied on top of the base win whenever reels 1-2-3 win. Frequencies here must separately sum to 100%."}
               </p>
               {!specialFrequencyValid && (
-                <p className="mt-2 text-sm text-rose-400">
+                <p className="mt-2 text-sm text-rose-600">
                   Special reel frequencies must sum to 100% — currently {specialFrequencySum.toFixed(2)}%.
                 </p>
               )}
-              <div className="mt-3 overflow-x-auto rounded-xl border border-slate-800">
+              <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-950 text-left text-slate-500">
+                  <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
                     <tr>
                       <th className="px-3 py-2">Symbol</th>
                       <th className="px-3 py-2">Frequency %</th>
@@ -913,11 +913,11 @@ export function AdminRtpPage() {
                   </thead>
                   <tbody>
                     {config.specialReelTiers.map((tier) => (
-                      <tr key={tier.key} className="border-t border-slate-800">
-                        <td className="px-3 py-2 font-medium text-white">
+                      <tr key={tier.key} className="border-t border-slate-200">
+                        <td className="px-3 py-2 font-medium text-slate-800">
                           <div className="flex items-center gap-2">
                             {tierImage(config.gameId, tier.key) && (
-                              <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                              <img src={tierImage(config.gameId, tier.key)} alt="" className="h-8 w-8 rounded object-contain bg-slate-100" />
                             )}
                             {TIER_LABELS[tier.key]}
                           </div>
@@ -960,7 +960,7 @@ export function AdminRtpPage() {
 
               {config.respinRange && (
                 <div className="mt-4">
-                  <label className="text-sm font-semibold text-white">Respin count range</label>
+                  <label className="text-sm font-semibold text-slate-800">Respin count range</label>
                   <p className="mt-1 text-xs text-slate-500">
                     When RESPIN lands, the player is awarded a random number of free re-spins within this range.
                   </p>
@@ -992,8 +992,8 @@ export function AdminRtpPage() {
           )}
 
           {(config.gameId === "crystal-clover" || config.gameId === "vegas-hits") && config.reelStateConfig && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">Reel state chance</div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">Reel state chance</div>
               <p className="mt-1 text-xs text-slate-500">
                 Each reel always shows either 1 symbol on the center payline or 2 symbols on the top+bottom
                 paylines — never all 3. This is the chance it picks the center-only state.
@@ -1014,8 +1014,8 @@ export function AdminRtpPage() {
           )}
 
           {config.gameId === "vegas-hits" && config.wildRules && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">RED HOT 3X wild rules</div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">RED HOT 3X wild rules</div>
               <p className="mt-1 text-xs text-slate-500">
                 None of these correspond to a reel symbol above — they're the wild's own payout rules (see the
                 paytable modal in-game for the plain-English version). The 4 "bet" fields use the same internal
@@ -1093,8 +1093,8 @@ export function AdminRtpPage() {
           )}
 
           {config.gameId === "life-of-luxury" && config.symbolPayouts && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">Symbol payouts (x line bet)</div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">Symbol payouts (x line bet)</div>
               <p className="mt-1 text-xs text-slate-500">
                 Each symbol's own 3/4/5-of-a-kind payout — matched left-to-right on an active line, minimum 3.
                 These don't correspond to the Frequency % rows above (those are reel-strip draw weight); this is
@@ -1102,7 +1102,7 @@ export function AdminRtpPage() {
               </p>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-slate-500">
+                  <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
                     <tr>
                       <th className="py-1 pr-3">Symbol</th>
                       <th className="py-1 pr-3">X3</th>
@@ -1112,11 +1112,11 @@ export function AdminRtpPage() {
                   </thead>
                   <tbody>
                     {LOL_REGULAR_SYMBOLS.map((symbol) => (
-                      <tr key={symbol} className="border-t border-slate-800">
-                        <td className="py-2 pr-3 font-medium text-white">
+                      <tr key={symbol} className="border-t border-slate-200">
+                        <td className="py-2 pr-3 font-medium text-slate-800">
                           <div className="flex items-center gap-2">
                             {tierImage("life-of-luxury", symbol) && (
-                              <img src={tierImage("life-of-luxury", symbol)} alt="" className="h-8 w-8 rounded object-contain bg-slate-800" />
+                              <img src={tierImage("life-of-luxury", symbol)} alt="" className="h-8 w-8 rounded object-contain bg-slate-100" />
                             )}
                             {TIER_LABELS[symbol]}
                           </div>
@@ -1141,8 +1141,8 @@ export function AdminRtpPage() {
           )}
 
           {config.gameId === "life-of-luxury" && config.scatterRules && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <div className="text-sm font-semibold text-white">Coin scatter rules</div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="text-sm font-semibold text-slate-800">Coin scatter rules</div>
               <p className="mt-1 text-xs text-slate-500">
                 Coin is rolled independently on every cell at its own Chance % below — it is NOT one of the
                 Frequency % rows above (those 10 rows are the 9 payout symbols + Filler, summing to 100% on their
@@ -1211,13 +1211,13 @@ export function AdminRtpPage() {
           )}
 
           {saveErrors.length > 0 && (
-            <div className="rounded-xl border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-300">
+            <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-700">
               {saveErrors.map((e, i) => (
                 <div key={i}>{e}</div>
               ))}
             </div>
           )}
-          {savedOk && <div className="text-sm font-medium text-emerald-400">Saved.</div>}
+          {savedOk && <div className="text-sm font-medium text-emerald-600">Saved.</div>}
 
           <button
             onClick={save}

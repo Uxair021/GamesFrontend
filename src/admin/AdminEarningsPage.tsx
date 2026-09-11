@@ -43,7 +43,7 @@ export function AdminEarningsPage() {
             <select
               value={gameId}
               onChange={(e) => setGameId(e.target.value)}
-              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700"
             >
               <option value="">All games</option>
               {gameRegistry.map((g) => (
@@ -52,13 +52,13 @@ export function AdminEarningsPage() {
                 </option>
               ))}
             </select>
-            <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1">
+            <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
               {RANGES.map((r) => (
                 <button
                   key={r.value}
                   onClick={() => setRange(r.value)}
                   className={`rounded-md px-3 py-1 text-xs font-medium ${
-                    range === r.value ? "bg-indigo-500 text-white" : "text-slate-400 hover:text-slate-200"
+                    range === r.value ? "bg-indigo-500 text-white" : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
                   {r.label}
@@ -90,15 +90,15 @@ export function AdminEarningsPage() {
         </div>
       )}
 
-      <div className="mt-6 h-80 rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div className="mt-6 h-80 rounded-xl border border-slate-200 bg-white p-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData}>
-            <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+            <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
             <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
             <YAxis stroke="#64748b" fontSize={12} />
             <Tooltip
-              contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8 }}
-              labelStyle={{ color: "#cbd5e1" }}
+              contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8 }}
+              labelStyle={{ color: "#334155" }}
             />
             <Line type="monotone" dataKey="wagered" stroke="#818cf8" strokeWidth={2} dot={false} name="Wagered" />
             <Line type="monotone" dataKey="totalWin" stroke="#fbbf24" strokeWidth={2} dot={false} name="Paid out" />

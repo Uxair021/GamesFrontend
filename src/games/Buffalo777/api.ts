@@ -1,13 +1,20 @@
 /**
- * Buffalo777 is a fully offline, client-side test game — there is no backend for it.
- * Everything below is a faithful port of what used to live in `backEnd/src/games/Buffalo777/
+ * Buffalo777 is a fully offline, client-side test game — RNG, paytable, and balance are all
+ * computed entirely in the browser, no backend involved. Everything below (aside from
+ * `logSpinResult`) is a faithful port of what used to live in `backEnd/src/games/Buffalo777/
  * engine.ts`, using the exact same tier weights/payout multipliers that previously came from
  * `backEnd/src/services/paytableConfig.ts`'s `DEFAULT_CONFIGS["buffalo-777"]` (the live odds —
  * `REFERENCE_PAYTABLE` below is/was the *display* table only). Kept as the same exported
  * function names/signatures as the old network calls (`spinRequest`, `getBuffalo777Config`) so
  * `Buffalo777Game.tsx` didn't need to change how it calls them — they just resolve locally now,
  * on the same tick, instead of over the network.
+ *
+ * The one exception is `logSpinResult`: a write-only, fire-and-forget call to a minimal backend
+ * endpoint (`backEnd/src/games/Buffalo777/routes.ts`) that records each spin into the same
+ * SpinHistory collection every other game uses, purely for record-keeping — it doesn't decide
+ * or verify the outcome, and gameplay never waits on or depends on it succeeding.
  */
+import { apiClient } from "../../api/client";
 
 export type BuffaloSymbol =
   | "TEN"
@@ -44,6 +51,33 @@ export interface Buffalo777ConfigResponse {
   betLevels: number[];
 }
 
+export type Buffalo777TierKey =
+  | "loss"
+  | "ten"
+  | "jack"
+  | "queen"
+  | "king"
+  | "ace"
+  | "bull"
+  | "anyBar"
+  | "singleBar"
+  | "doubleBar"
+  | "tripleBar"
+  | "moneyBag"
+  | "coin";
+
+export interface Buffalo777TierRow {
+  key: Buffalo777TierKey;
+  frequencyPercent: number;
+  payoutMultiplier: number | null;
+  celebration: WinTierName | null;
+}
+
+export interface Buffalo777RtpConfig {
+  targetRtpPercent: number;
+  tiers: Buffalo777TierRow[];
+}
+
 const DISPLAY_SYMBOLS: BuffaloSymbol[] = [
   "TEN",
   "JACK",
@@ -62,32 +96,16 @@ const BAR_SYMBOLS: ReadonlySet<BuffaloSymbol> = new Set(["SINGLE_BAR", "DOUBLE_B
 
 const BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 20, 25, 30];
 
-type TierKey =
-  | "loss"
-  | "ten"
-  | "jack"
-  | "queen"
-  | "king"
-  | "ace"
-  | "bull"
-  | "anyBar"
-  | "singleBar"
-  | "doubleBar"
-  | "tripleBar"
-  | "moneyBag"
-  | "coin";
-
-interface TierRow {
-  key: TierKey;
-  frequencyPercent: number;
-  payoutMultiplier: number | null;
-  celebration: WinTierName | null;
-}
+type TierKey = Buffalo777TierKey;
+type TierRow = Buffalo777TierRow;
 
 /** Ported verbatim from paytableConfig.ts's DEFAULT_CONFIGS["buffalo-777"] — the actual live
- * odds (not the cosmetic REFERENCE_PAYTABLE below). frequencyPercent sums to exactly 100;
- * targetRtpPercent ≈ 92.98%. */
-const TIERS: TierRow[] = [
+ * odds this game shipped with (not the cosmetic REFERENCE_PAYTABLE below), frequencyPercent
+ * summing to exactly 100 at a ~92.98% RTP. This is the fixed "shape"/relative rarity of every
+ * tier — used only to build the very first default config (see getBuffaloDefaultConfig) the
+ * first time the admin page loads; after that, the admin's own saved tiers are the live odds,
+ * edited directly rather than always re-derived from this table. */
+const BASE_TIERS: TierRow[] = [
   { key: "loss", frequencyPercent: 72.6187, payoutMultiplier: null, celebration: null },
   { key: "ten", frequencyPercent: 10.0904, payoutMultiplier: 1, celebration: null },
   { key: "jack", frequencyPercent: 6.7269, payoutMultiplier: 2, celebration: null },
@@ -102,6 +120,93 @@ const TIERS: TierRow[] = [
   { key: "moneyBag", frequencyPercent: 0.005, payoutMultiplier: 250, celebration: "MEGA WIN" },
   { key: "coin", frequencyPercent: 0.0011, payoutMultiplier: 500, celebration: "JACKPOT" },
 ];
+
+// --- Admin-adjustable RTP control (fully client-side — no backend for this game) ---
+//
+// Mirrors the exact data model AdminRtpPage.tsx uses for every other game's (backend-driven)
+// PaytableConfig — a `targetRtpPercent` plus a `tiers` array the admin edits directly
+// (frequency % and payout multiplier per row) — except this one is persisted to localStorage
+// instead of POSTed to the server. The saved `tiers` themselves ARE the live odds `rollTier()`
+// draws from (see below) — there's no separate "base table" involved once something's been
+// saved; BASE_TIERS below is only ever used to build the very first default.
+
+const RTP_CONFIG_STORAGE_KEY = "texas-slots-buffalo777-rtp-config";
+export const DEFAULT_BUFFALO_TARGET_RTP_PERCENT = 60;
+
+/** Sum of (frequencyPercent/100 * payoutMultiplier) across every tier, as a percent — the
+ * same formula AdminRtpPage.tsx's computeRtpPercent uses for every other game. */
+export function computeBuffaloRtpPercent(tiers: TierRow[]): number {
+  return (
+    tiers.reduce((sum, t) => (t.payoutMultiplier !== null ? sum + (t.frequencyPercent / 100) * t.payoutMultiplier : sum), 0) *
+    100
+  );
+}
+
+/** Rescales `tiers` to land on `targetRtpPercent` — identical technique to AdminRtpPage.tsx's
+ * own `rescaleLineTiers`: every winning tier's frequency is multiplied by `scale` (clamped at
+ * 0, payout multipliers left untouched), then `loss` absorbs whatever's left so frequencies
+ * still sum to exactly 100%. Callers pass `targetRtpPercent / computeBuffaloRtpPercent(tiers)`
+ * as the effective scale, same as the admin page does. */
+export function rescaleBuffaloTiers(tiers: TierRow[], scale: number): TierRow[] {
+  const scaled = tiers.map((t) =>
+    t.key === "loss" ? t : { ...t, frequencyPercent: Math.max(0, t.frequencyPercent * scale) }
+  );
+  const nonLossSum = scaled.reduce((sum, t) => (t.key === "loss" ? sum : sum + t.frequencyPercent), 0);
+  return scaled.map((t) => (t.key === "loss" ? { ...t, frequencyPercent: Math.max(0, 100 - nonLossSum) } : t));
+}
+
+/** The fresh, first-time-ever default config — BASE_TIERS' shape rescaled to the 60% default
+ * target. Used both as the fallback when nothing's saved yet and by the admin page's "Reset to
+ * default" action. */
+export function getBuffaloDefaultConfig(): Buffalo777RtpConfig {
+  const baseRtp = computeBuffaloRtpPercent(BASE_TIERS);
+  const scale = baseRtp > 0 ? DEFAULT_BUFFALO_TARGET_RTP_PERCENT / baseRtp : 0;
+  return { targetRtpPercent: DEFAULT_BUFFALO_TARGET_RTP_PERCENT, tiers: rescaleBuffaloTiers(BASE_TIERS, scale) };
+}
+
+function isValidTierRow(row: unknown): row is TierRow {
+  if (!row || typeof row !== "object") return false;
+  const r = row as Record<string, unknown>;
+  return (
+    typeof r.key === "string" &&
+    typeof r.frequencyPercent === "number" &&
+    (r.payoutMultiplier === null || typeof r.payoutMultiplier === "number") &&
+    (r.celebration === null || typeof r.celebration === "string")
+  );
+}
+
+/** Reads the admin's saved RTP config from localStorage — falls back to the fresh default if
+ * nothing's been saved yet, the stored value is corrupt/malformed, or localStorage itself is
+ * unavailable (private browsing, etc.). */
+export function getBuffaloRtpConfig(): Buffalo777RtpConfig {
+  try {
+    const raw = localStorage.getItem(RTP_CONFIG_STORAGE_KEY);
+    if (raw === null) return getBuffaloDefaultConfig();
+    const parsed = JSON.parse(raw) as Partial<Buffalo777RtpConfig>;
+    if (
+      typeof parsed.targetRtpPercent !== "number" ||
+      !Array.isArray(parsed.tiers) ||
+      parsed.tiers.length === 0 ||
+      !parsed.tiers.every(isValidTierRow)
+    ) {
+      return getBuffaloDefaultConfig();
+    }
+    return { targetRtpPercent: parsed.targetRtpPercent, tiers: parsed.tiers };
+  } catch {
+    return getBuffaloDefaultConfig();
+  }
+}
+
+/** Persists a new RTP config — takes effect on the very next spin (rollTier() re-reads this
+ * on every call, see below), no reload or cross-tab wiring needed. Silently no-ops if
+ * localStorage isn't available. */
+export function setBuffaloRtpConfig(config: Buffalo777RtpConfig): void {
+  try {
+    localStorage.setItem(RTP_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    /* private browsing / storage disabled — setting just won't persist */
+  }
+}
 
 /** Every win tier maps 1:1 to a single symbol/combo — anyBar has no fixed symbol (it's a
  * mixed combination, handled separately in buildLineForTier/evaluateLine). */
@@ -186,15 +291,18 @@ function buildLineForTier(tierKey: TierKey): [BuffaloSymbol, BuffaloSymbol, Buff
   return buildLossLine();
 }
 
-/** Weighted-random pick of one tier by frequencyPercent. */
+/** Weighted-random pick of one tier by frequencyPercent — reads the admin's saved tier table
+ * fresh on every call, so a change saved from the "Buffalo RTP" admin tab takes effect on the
+ * very next spin. */
 function rollTier(): TierRow {
-  const total = TIERS.reduce((sum, t) => sum + t.frequencyPercent, 0);
+  const tiers = getBuffaloRtpConfig().tiers;
+  const total = tiers.reduce((sum, t) => sum + t.frequencyPercent, 0);
   let roll = Math.random() * total;
-  for (const tier of TIERS) {
+  for (const tier of tiers) {
     roll -= tier.frequencyPercent;
     if (roll < 0) return tier;
   }
-  return TIERS[TIERS.length - 1];
+  return tiers[tiers.length - 1];
 }
 
 /** Runs one local, outcome-first spin: the tier is decided first (by frequency), then the
@@ -235,4 +343,17 @@ export async function getBuffalo777Config(): Promise<Buffalo777ConfigResponse> {
     paytable: REFERENCE_PAYTABLE,
     betLevels: BET_LEVELS,
   };
+}
+
+/** Records one already-completed spin into the same SpinHistory collection every other game
+ * uses — write-only, fire-and-forget (see this file's top doc comment). Call sites should
+ * `.catch(() => {})` this; a failed/slow log call must never affect gameplay. */
+export async function logSpinResult(params: {
+  betAmount: number;
+  winAmount: number;
+  reelSymbols: BuffaloSymbol[][];
+  balanceAfter: number;
+  tier: WinTierName | null;
+}): Promise<void> {
+  await apiClient.post("/api/games/buffalo-777/spin-log", params);
 }

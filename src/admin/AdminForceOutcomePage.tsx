@@ -50,11 +50,11 @@ export function AdminForceOutcomePage() {
         description="Queue a directive that makes a player's next spin, on a specific game, land on a specific win tier."
       />
 
-      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 sm:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-5">
         <select
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
         >
           <option value="">Select player...</option>
           {users.map((u) => (
@@ -67,7 +67,7 @@ export function AdminForceOutcomePage() {
         <select
           value={gameId}
           onChange={(e) => setGameId(e.target.value)}
-          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
         >
           {gameRegistry.map((g) => (
             <option key={g.slug} value={g.slug}>
@@ -78,7 +78,7 @@ export function AdminForceOutcomePage() {
         <select
           value={targetTier}
           onChange={(e) => setTargetTier(e.target.value as (typeof TIERS)[number])}
-          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
         >
           {TIERS.map((t) => (
             <option key={t} value={t}>
@@ -96,9 +96,9 @@ export function AdminForceOutcomePage() {
         </button>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-800">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-sm">
-          <thead className="bg-slate-900 text-left text-slate-500">
+          <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Game</th>
@@ -108,29 +108,32 @@ export function AdminForceOutcomePage() {
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-white">
             {directives.map((d) => (
-              <tr key={d._id} className="border-t border-slate-800 hover:bg-slate-900/80">
-                <td className="px-3 py-2 text-slate-300">{usernameFor(d.userId)}</td>
-                <td className="px-3 py-2 text-slate-400">{gameNameFor(d.gameId)}</td>
-                <td className="px-3 py-2 text-amber-400">{d.targetTier}</td>
+              <tr key={d._id} className="border-t border-slate-200 even:bg-slate-50 hover:bg-sky-50">
+                <td className="px-3 py-2 text-slate-700">{usernameFor(d.userId)}</td>
+                <td className="px-3 py-2 text-slate-500">{gameNameFor(d.gameId)}</td>
+                <td className="px-3 py-2 text-amber-600">{d.targetTier}</td>
                 <td className="px-3 py-2">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${
+                    className={`rounded px-2 py-0.5 text-xs font-medium text-white ${
                       d.status === "pending"
-                        ? "bg-indigo-500/10 text-indigo-400"
+                        ? "bg-indigo-500"
                         : d.status === "consumed"
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "bg-slate-700/50 text-slate-400"
+                          ? "bg-sky-500"
+                          : "bg-slate-400"
                     }`}
                   >
                     {d.status}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-600">{formatRelativeTime(d.createdAt)}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">{formatRelativeTime(d.createdAt)}</td>
                 <td className="px-3 py-2 text-right">
                   {d.status === "pending" && (
-                    <button onClick={() => cancel(d._id)} className="text-xs text-rose-400 hover:text-rose-300">
+                    <button
+                      onClick={() => cancel(d._id)}
+                      className="rounded-md bg-rose-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-400"
+                    >
                       Cancel
                     </button>
                   )}

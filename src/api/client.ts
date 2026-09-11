@@ -8,7 +8,7 @@ const TOKEN_KEY = "texas-slots-token";
  * the dev machine's LAN IP instead, "localhost" would point at the phone. In that case,
  * fall back to talking to the same host the page was loaded from.
  */
-function resolveApiBaseUrl(): string {
+export function resolveApiBaseUrl(): string {
   const envUrl = import.meta.env.VITE_API_URL as string | undefined;
   const pageIsLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
   if (envUrl && (pageIsLocalhost || !envUrl.includes("localhost"))) {

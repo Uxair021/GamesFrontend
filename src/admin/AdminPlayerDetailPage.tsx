@@ -59,8 +59,8 @@ export function AdminPlayerDetailPage() {
         <StatTile label="Pending forced outcomes" value={String(pending.length)} icon={Coins} accent="indigo" />
       </div>
 
-      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-white">Set balance</h2>
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">Set balance</h2>
         <div className="flex gap-2">
           <input
             type="number"
@@ -69,7 +69,7 @@ export function AdminPlayerDetailPage() {
             placeholder={user.balance.toFixed(2)}
             value={newBalance}
             onChange={(e) => setNewBalance(e.target.value)}
-            className="w-40 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            className="w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
           />
           <button
             onClick={saveBalance}
@@ -82,17 +82,17 @@ export function AdminPlayerDetailPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-800 bg-slate-900">
-          <h2 className="border-b border-slate-800 px-4 py-3 text-sm font-semibold text-white">Balance history</h2>
-          <div className="divide-y divide-slate-800">
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">Balance history</h2>
+          <div className="divide-y divide-slate-200">
             {balanceHistory.map((b) => (
               <div key={b._id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                <span className={b.delta >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                <span className={b.delta >= 0 ? "text-emerald-600" : "text-rose-600"}>
                   {b.delta >= 0 ? "+" : ""}
                   {formatBalance(b.delta)}
                 </span>
                 <span className="text-slate-500">{formatBalance(b.newBalance)} after</span>
-                <span className="text-xs text-slate-600">{formatRelativeTime(b.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatRelativeTime(b.createdAt)}</span>
               </div>
             ))}
             {balanceHistory.length === 0 && (
@@ -101,18 +101,18 @@ export function AdminPlayerDetailPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900">
-          <h2 className="border-b border-slate-800 px-4 py-3 text-sm font-semibold text-white">Recent spins</h2>
-          <div className="divide-y divide-slate-800">
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">Recent spins</h2>
+          <div className="divide-y divide-slate-200">
             {spins.map((s) => (
               <div key={s._id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                <span className="text-slate-400">bet {formatBalance(s.betAmount)}</span>
-                <span className={s.winAmount > 0 ? "text-emerald-400" : "text-slate-500"}>
+                <span className="text-slate-500">bet {formatBalance(s.betAmount)}</span>
+                <span className={s.winAmount > 0 ? "text-emerald-600" : "text-slate-500"}>
                   {s.winAmount > 0 ? `+${formatBalance(s.winAmount)}` : "-"}
                 </span>
-                {s.tier && <span className="text-xs text-amber-400">{s.tier}</span>}
-                {s.forced && <span className="text-xs text-indigo-400">forced</span>}
-                <span className="text-xs text-slate-600">{formatRelativeTime(s.createdAt)}</span>
+                {s.tier && <span className="text-xs text-amber-600">{s.tier}</span>}
+                {s.forced && <span className="text-xs text-indigo-600">forced</span>}
+                <span className="text-xs text-slate-500">{formatRelativeTime(s.createdAt)}</span>
               </div>
             ))}
             {spins.length === 0 && (

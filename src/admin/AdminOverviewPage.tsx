@@ -36,30 +36,30 @@ export function AdminOverviewPage() {
       {stats && stats.pendingForcedOutcomes > 0 && (
         <Link
           to="/admin/force-outcome"
-          className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300 hover:bg-amber-500/15"
+          className="mt-4 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 hover:bg-amber-100"
         >
           <Zap size={16} />
           {stats.pendingForcedOutcomes} pending forced outcome{stats.pendingForcedOutcomes === 1 ? "" : "s"} — review
         </Link>
       )}
 
-      <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <h2 className="text-sm font-semibold text-white">Recent activity</h2>
-          <span className={`flex items-center gap-1 text-xs ${connected ? "text-emerald-400" : "text-slate-500"}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-slate-600"}`} />
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-800">Recent activity</h2>
+          <span className={`flex items-center gap-1 text-xs ${connected ? "text-emerald-600" : "text-slate-500"}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-slate-400"}`} />
             {connected ? "live" : "connecting..."}
           </span>
         </div>
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-slate-200">
           {spins.slice(0, 6).map((s, i) => (
-            <div key={i} className="flex hover:bg-slate-800/80 items-center justify-between px-4 py-2.5 text-sm">
-              <span className="text-slate-300">{s.username || s.userId}</span>
+            <div key={i} className="flex hover:bg-slate-50 items-center justify-between px-4 py-2.5 text-sm">
+              <span className="text-slate-700">{s.username || s.userId}</span>
               <span className="text-slate-500">bet {formatBalance(s.bet)}</span>
-              <span className={s.winAmount > 0 ? "text-emerald-400" : "text-slate-500"}>
+              <span className={s.winAmount > 0 ? "text-emerald-600" : "text-slate-500"}>
                 {s.winAmount > 0 ? `+${formatBalance(s.winAmount)}` : "-"}
               </span>
-              <span className="text-xs text-slate-600">{formatRelativeTime(s.createdAt)}</span>
+              <span className="text-xs text-slate-500">{formatRelativeTime(s.createdAt)}</span>
             </div>
           ))}
           {spins.length === 0 && <div className="px-4 py-6 text-center text-sm text-slate-500">No spins yet.</div>}
