@@ -104,7 +104,12 @@ export class Reel {
    * ones continue down and out the bottom. Continues from whatever's currently displayed
    * (filler + target prepended above the existing cells, never a jump/flash at the start).
    */
-  spinTo(target: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol], duration: number, delay: number): Promise<void> {
+  spinTo(
+    target: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol],
+    duration: number,
+    delay: number,
+    fillerCount: number = FILLER_COUNT
+  ): Promise<void> {
     this.stopWinGlow();
     if (this.visibleCells.length === 0) {
       // Nothing on screen yet (first render) — seed with a static frame to continue from.
@@ -112,7 +117,7 @@ export class Reel {
     }
 
     const startY = this.container.y;
-    const filler: BuffaloSymbol[] = Array.from({ length: FILLER_COUNT }, () => this.randomSymbol());
+    const filler: BuffaloSymbol[] = Array.from({ length: fillerCount }, () => this.randomSymbol());
     // Prepend order matters: filler first (ends up *below* the target, closer to the old
     // stack — passes through the window first), then target BELOW->MIDDLE->ABOVE last, so
     // "above" ends up the most-negative (topmost) of the three, per prependCells' contract.
@@ -132,10 +137,9 @@ export class Reel {
           // Clamped to >=0 — see WinCelebration.tsx for why requestAnimationFrame's
           // timestamp can otherwise come in marginally before `start`.
           const t = Math.min(Math.max((now - start) / duration, 0), 1);
-          // Ease-in-out (smoothly accelerates from a standstill, then smoothly decelerates
-          // into the landing) instead of a flat-out ease-out — the reel now ramps up to
-          // speed at the start of every spin instead of snapping straight to full speed.
-          const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          // Ease-out only — the reel snaps straight to full speed the instant it starts (no
+          // ramp-up), then decelerates smoothly into the landing.
+          const eased = 1 - Math.pow(1 - t, 3);
           this.container.y = startY + (finalY - startY) * eased;
           if (t < 1) {
             rafId = requestAnimationFrame(tick);

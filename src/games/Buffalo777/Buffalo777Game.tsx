@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
 import { Buffalo777Scene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/Buffalo777Scene";
-import { getBuffalo777Config, spinRequest, logSpinResult, Buffalo777ConfigResponse, PayoutRow } from "./api";
+import { getBuffalo777Config, spinRequest, Buffalo777ConfigResponse, PayoutRow } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { useFitScale } from "../shared/useFitScale";
@@ -159,16 +159,6 @@ export function Buffalo777Game() {
       const newBalance = Math.round(((user?.balance ?? 0) - betAmount + result.winAmount) * 100) / 100;
       setBalance(newBalance);
 
-      // Fire-and-forget — purely a record-keeping log alongside every other game's spin
-      // history, never awaited and never allowed to affect gameplay if it fails/is slow.
-      logSpinResult({
-        betAmount,
-        winAmount: result.winAmount,
-        reelSymbols: result.reels,
-        balanceAfter: newBalance,
-        tier: result.tier,
-      }).catch(() => {});
-
       if (result.winAmount > 0) {
         sceneRef.current.setWinGlow(true);
         winGlowActiveRef.current = true;
@@ -318,25 +308,19 @@ export function Buffalo777Game() {
           <button
             onClick={() => runSpin()}
             disabled={!ready || spinning}
-            className="relative flex h-[70px] w-[200px] items-center justify-center rounded-3xl border-2 border-orange-950 bg-gradient-to-b from-yellow-300 via-amber-500 to-orange-600 text-4xl font-black italic tracking-wide text-white transition-transform duration-100 ease-out active:translate-y-[3px] disabled:opacity-50 disabled:active:translate-y-0"
+            className={`relative flex h-[70px] w-[200px] items-center justify-center rounded-3xl border-2 text-4xl font-black italic tracking-wide text-white transition-colors duration-150 active:translate-y-[3px] disabled:active:translate-y-0 ${
+              spinning
+                ? "border-red-950 bg-gradient-to-b from-red-500 via-red-600 to-red-800"
+                : "border-orange-950 bg-gradient-to-b from-yellow-300 via-amber-500 to-orange-600 disabled:opacity-50"
+            }`}
             style={{
-              boxShadow: "0 5px 0 #7c2d12, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -5px 8px rgba(0,0,0,0.3)",
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.boxShadow =
-                "0 0px 0 #7c2d12, 0 2px 3px rgba(0,0,0,0.4), inset 0 4px 8px rgba(0,0,0,0.45)";
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.boxShadow =
-                "0 5px 0 #7c2d12, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -5px 8px rgba(0,0,0,0.3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow =
-                "0 5px 0 #7c2d12, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -5px 8px rgba(0,0,0,0.3)";
+              boxShadow: spinning
+                ? "0 5px 0 #450a0a, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.35), inset 0 -5px 8px rgba(0,0,0,0.3)"
+                : "0 5px 0 #7c2d12, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -5px 8px rgba(0,0,0,0.3)",
             }}
           >
             <span className="pointer-events-none absolute inset-x-[12%] top-[10%] h-[30%] rounded-full bg-white/40" style={{ filter: "blur(3px)" }} />
-            {spinning ? "..." : "SPIN"}
+            SPIN
           </button>
         </div>
       </div>

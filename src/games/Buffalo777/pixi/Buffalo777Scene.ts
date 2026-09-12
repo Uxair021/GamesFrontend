@@ -11,7 +11,10 @@ const COLUMN_GAP = 25;
  * multiplier) — < 1 makes the whole spin snappier, > 1 makes it last longer, without
  * changing anything about how a spin plays out (same stagger, same easing, same turbo
  * behavior). */
-const SPIN_SPEED_MULTIPLIER = 1.3;
+const SPIN_SPEED_MULTIPLIER = .9;
+
+/** Filler symbol count reel 0 scrolls through — see the distance/duration note in spin(). */
+const BASE_FILLER_COUNT = 18;
 
 // Fractional position of the reel window within bg.png (1672x941 source art) — the three
 // white boxes under the "BUFFALO 777" title. First-pass estimate; tune by eye as needed.
@@ -153,19 +156,27 @@ export class Buffalo777Scene {
   }
 
   /** Spins all reels and lands on the given result. Resolves once every reel has stopped.
-   * All 3 reels start scrolling at the same instant; the staggered stop (each landing
-   * progressively later) comes from the increasing duration per reel index. onReelLand
-   * fires as each individual reel stops (for a per-reel landing sound). `turbo` shortens
-   * the spin/stagger duration for a much snappier round. */
+   * All 3 reels start scrolling at the same instant *and* at the same initial speed; the
+   * staggered stop (each landing progressively later) comes from the increasing duration per
+   * reel index. Since every reel uses the same ease-out shape, matching initial speed across
+   * reels with different durations means each reel's travel distance (filler symbol count)
+   * must scale with its own duration too — see the `distance/duration` note on
+   * BASE_FILLER_COUNT below. onReelLand fires as each individual reel stops (for a per-reel
+   * landing sound). `turbo` shortens the spin/stagger duration for a much snappier round. */
   async spin(
     reelsResult: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol][],
     onReelLand?: (index: number) => void,
     turbo = false
   ): Promise<void> {
     const speed = (turbo ? 0.4 : 1) * SPIN_SPEED_MULTIPLIER;
-    const spins = this.reels.map((reel, i) =>
-      reel.spinTo(reelsResult[i], (900 + i * 350) * speed, 0).then(() => onReelLand?.(i))
-    );
+    const baseDuration = 900 * speed;
+    const spins = this.reels.map((reel, i) => {
+      const duration = (900 + i * 350) * speed;
+      // Filler count scaled to duration keeps distance/duration (and so the ease-out curve's
+      // initial speed) identical across reels — only reel 0 uses exactly BASE_FILLER_COUNT.
+      const fillerCount = Math.round(BASE_FILLER_COUNT * (duration / baseDuration));
+      return reel.spinTo(reelsResult[i], duration, 0, fillerCount).then(() => onReelLand?.(i));
+    });
     await Promise.all(spins);
   }
 
