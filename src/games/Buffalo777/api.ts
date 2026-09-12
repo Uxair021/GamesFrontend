@@ -1,14 +1,22 @@
 /**
- * Buffalo777 is a fully offline, client-side test game — RNG, paytable, and balance are all
- * computed entirely in the browser, no backend involved at all. Everything below is a
- * faithful port of what used to live in `backEnd/src/games/Buffalo777/engine.ts`, using the
+ * Buffalo777's RNG, paytable, and balance are all computed entirely in the browser — RTP and
+ * odds are configured client-side (see the RTP control below) and every spin resolves locally,
+ * on the same tick, instead of over the network. Everything below (other than `logSpinResult`)
+ * is a faithful port of what used to live in `backEnd/src/games/Buffalo777/engine.ts`, using the
  * exact same tier weights/payout multipliers that previously came from
  * `backEnd/src/services/paytableConfig.ts`'s `DEFAULT_CONFIGS["buffalo-777"]` (the live odds —
  * `REFERENCE_PAYTABLE` below is/was the *display* table only). Kept as the same exported
  * function names/signatures as the old network calls (`spinRequest`, `getBuffalo777Config`) so
- * `Buffalo777Game.tsx` didn't need to change how it calls them — they just resolve locally now,
- * on the same tick, instead of over the network.
+ * `Buffalo777Game.tsx` didn't need to change how it calls them.
+ *
+ * The one exception is `logSpinResult`: a write-only, fire-and-forget call to a minimal backend
+ * endpoint (`backEnd/src/games/Buffalo777/routes.ts`) that just records the already-decided
+ * result into the same `SpinHistory` collection every other game uses, so Buffalo777 spins show
+ * up in the admin dashboard (Earnings, Player Detail, Live Feed) like every other game's. It
+ * never influences gameplay — the spin itself is fully decided above before this is called.
  */
+
+import { apiClient } from "../../api/client";
 
 export type BuffaloSymbol =
   | "TEN"
@@ -337,4 +345,16 @@ export async function getBuffalo777Config(): Promise<Buffalo777ConfigResponse> {
     paytable: REFERENCE_PAYTABLE,
     betLevels: BET_LEVELS,
   };
+}
+
+/** Fire-and-forget: records a spin that already happened (locally) into the backend's
+ * SpinHistory, purely for admin record-keeping — see the module doc comment above. */
+export async function logSpinResult(params: {
+  betAmount: number;
+  winAmount: number;
+  reelSymbols: BuffaloSymbol[][];
+  balanceAfter: number;
+  tier: WinTierName | null;
+}): Promise<void> {
+  await apiClient.post("/api/games/buffalo-777/spin-log", params);
 }
