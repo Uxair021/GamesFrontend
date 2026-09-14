@@ -1,0 +1,857 @@
+/* Fully code-drawn theme — no image assets besides the port shape. Black/amber "casino
+   cabinet" gradient matching the rest of texasSlots' games (Buffalo 777, Cash Machine, etc.),
+   with a gold chrome accent language throughout so Hexa Keno reads as part of the same
+   platform rather than a bolted-on different app. Layout takes general inspiration from
+   classic keno-cabinet conventions (hex board, side control rail, a live paytable, a drawn-
+   numbers feed) without copying any specific product's exact design. */
+.keno-gameArea {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0px 24px;
+  background: radial-gradient(
+    ellipse at center,
+    #2a1a05 0%,
+    #1a1004 35%,
+    #0d0802 65%,
+    #000000 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+/* Faint diagonal shimmer texture over the background — subtle, not a real image. */
+.keno-gameArea::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.015) 0px,
+    rgba(255, 255, 255, 0.015) 2px,
+    transparent 2px,
+    transparent 14px
+  );
+  pointer-events: none;
+}
+
+/* A fixed-resolution "virtual canvas" (like a game canvas, not a responsive web
+   layout) — always exactly 1600x900 regardless of device, then uniformly scaled
+   up or down as a single unit (see HexaKenoGame.tsx's useFitScale(fillViewport:
+   true) + transform: scale()) to fit whatever screen it's on. Every size inside
+   this table must stay in fixed px (never vw/vh/%-of-viewport) so the layout's
+   proportions never drift between devices — only the outer scale factor changes. */
+.keno-table {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 20px;
+  width: 1600px;
+  height: 900px;
+}
+
+/* ---------- Left rail: drawn-numbers feed + live paytable ---------- */
+
+.keno-side-left {
+  width: 230px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.keno-draw-feed,
+.keno-paytable {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  padding: 10px;
+}
+
+.keno-paytable {height: 43%}
+
+/* The "port" shape (rounded panel with a notched top-right corner, like a
+   ball chute) is the shape-shape.png asset — it already includes its own
+   black fill + light border, so this just sizes/positions it and leaves
+   room inside for the balls. Overrides the shared border/radius/shadow/
+   padding above (redundant now that the image supplies its own edge). */
+.keno-draw-feed {
+  position: relative;
+  width: 120%;
+  aspect-ratio: 900 / 1577;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  background-image: url("/symbols/hexaKeno/shape-shape.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  padding: 27px 22px 16px;
+  padding-right: 70px;
+}
+
+.keno-draw-feed-label,
+.keno-paytable-header {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #ffe066;
+  margin-bottom: 8px;
+}
+
+.keno-paytable-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+/* Fixed 4-column x 5-row grid (20 drawn balls / 4 per row divides evenly) —
+   deterministic slots so the fall-in animation's per-ball starting offset
+   (computed in HexaKenoGame.tsx from row/col) always lines up with a real
+   journey from the port's top-right notch. Each ball is explicitly placed
+   (see gridRow/gridColumn set inline) into row BALL_GRID_ROWS - row, so the
+   first batch lands in the bottom-most track and each later batch stacks
+   directly above it — piling up from the floor of the port like stones in a
+   jar, not filling top-down. align-content:end pins the whole grid to the
+   container's bottom edge so there's no dead gap below the bottom row while
+   the pile is still small. */
+.keno-draw-feed-balls {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 50px);
+  grid-template-rows: repeat(4, 50px);
+  justify-content: center;
+  align-content: end;
+  gap: 8px;
+  margin-top: 0px;
+  overflow-y: auto;
+  overflow: hidden;
+}
+
+.keno-draw-feed-empty {
+  color: #55507a;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.keno-feed-ball {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+  background: #fc4a04;
+  color: #ffea29;
+  -webkit-text-stroke: 2px red;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  animation: keno-ball-fall 0.55s cubic-bezier(0.34, 1.15, 0.64, 1) both;
+}
+
+.keno-feed-ball--hit {
+  background: #fc4a04;
+  color: #49ddff;
+  -webkit-text-stroke: 2px #10057c;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Balls drop in from the notch cut into the top-right of the port image
+   (shape-shape.png) rather than just popping into place. --fall-x/--fall-y
+   are set per-ball inline so every ball's start point is the same real spot
+   near the notch, regardless of which grid slot it's actually landing in — a
+   fixed offset here would only look right for one slot. Ends with a small
+   settle-bounce once it reaches its resting spot. */
+@keyframes keno-ball-fall {
+  0% {
+    transform: translate(var(--fall-x, 60px), var(--fall-y, -100px)) scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-6px, 8px) scale(1.06);
+    opacity: 1;
+  }
+  75% {
+    transform: translate(2px, -4px) scale(0.97);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.keno-paytable-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.keno-paytable-hint {
+  font-size: 11px;
+  color: #7f7aa3;
+  margin: 0;
+  padding: 6px 2px;
+}
+
+.keno-paytable-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #cfd0e8;
+  background: radial-gradient(circle at 32% 28%, #3a2d63 0%, #241a47 55%, #180f34 100%);
+}
+
+.keno-paytable-row--active {
+  background: linear-gradient(90deg, rgba(255, 224, 102, 0.25), rgba(255, 159, 28, 0.15));
+  color: #ffe066;
+  box-shadow: inset 0 0 0 1px rgba(255, 224, 102, 0.4);
+}
+
+/* ---------- Center: the board itself ---------- */
+
+.keno-board-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-radius: 24px;
+  padding: 18px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+}
+
+/* Decorative "HEXAKENO" lettering framing the board, one letter per row of
+   the grid, mirrored on both edges. Purely cosmetic (aria-hidden). */
+.keno-board-letters {
+  position: absolute;
+  width: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.keno-board-letters--left {
+  left: 55px;
+  top: 40px;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.keno-board-letters--DOWN {
+  left: 230px;
+  bottom: 150px;
+  flex-direction: row;
+  gap: 170px;
+}
+
+.keno-board-letters--UP {
+  left: 320px;
+  top: 10px;
+  flex-direction: row;
+  gap: 170px;
+}
+
+.keno-board-letters--right {
+  right: 50px;
+  top: 90px;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.keno-board-letters span {
+  font-size: 25px;
+  font-weight: 700;
+  color: #ffb98a;
+  text-shadow:
+    0 0 6px rgba(255, 138, 61, 0.85),
+    0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.keno-board-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+
+.keno-logo {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: linear-gradient(180deg, #ffe066 0%, #ff9f1c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 2px 12px rgba(255, 159, 28, 0.25);
+}
+
+.keno-result-summary {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #bfc3d9;
+}
+
+/* Honeycomb: flat-top hexagons (flat top/bottom, points left/right) arranged
+   in columns rather than rows — cells within a column stack directly (flat
+   edges touching), and alternating columns are pulled down by half a cell
+   so the pointed sides interlock with their neighbors, same tessellation
+   idea as before just rotated 90 degrees. */
+.keno-board {
+  --cell: 85px;
+  display: flex;
+  flex-direction: row;
+}
+
+.keno-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  margin-left: calc(var(--cell) * -0.40);
+}
+
+.keno-col:first-child {
+  margin-left: 0;
+}
+
+.keno-col--offset {
+  margin-top: calc(var(--cell) / 2 + 0px);
+}
+
+.keno-cell {
+  position: relative;
+
+  width: calc(var(--cell) + var(--cell) / 2);
+  height: var(--cell);
+
+  border: none;
+  outline: none;
+
+  /* OUTER HEXAGON / BORDER */
+  background: linear-gradient(
+    135deg,
+    #231075 0%,
+    #2d32de 45%,
+    #4B55E8 100%
+  );
+
+  clip-path: polygon(
+    25% 0%,
+    75% 0%,
+    100% 50%,
+    75% 100%,
+    25% 100%,
+    0% 50%
+  );
+
+  color: #ffc7c7;
+  -webkit-text-stroke: 2px #bd4f3b;
+
+  text-shadow:
+    0 0 5px rgba(255, 95, 60, 0.95),
+    0 2px 0 rgba(0, 0, 0, 0.65);
+
+  font-size: calc(var(--cell) * 0.32);
+  font-weight: 700;
+
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease;
+}
+
+/* INNER BLUE FACE */
+.keno-cell::before {
+  content: "";
+
+  position: absolute;
+
+  top: 6px;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+
+  background: linear-gradient(
+    135deg,
+    #586cff 0%,
+    #3945dc 42%,
+    #2930b7 70%,
+    #202087 100%
+  );
+
+  clip-path: polygon(
+    25% 0%,
+    75% 0%,
+    100% 50%,
+    75% 100%,
+    25% 100%,
+    0% 50%
+  );
+
+  /* subtle inner bevel */
+  box-shadow:
+    inset 0 5px 8px rgba(130, 145, 255, 0.45),
+    inset 0 -8px 10px rgba(10, 8, 80, 0.65);
+
+  z-index: 0;
+}
+
+/* HOVER */
+.keno-cell:hover {
+  transform: scale(1.03);
+
+  filter:
+    brightness(1.15)
+    drop-shadow(0 0 5px rgba(70, 70, 255, 0.8));
+}
+
+/* PRESSED */
+.keno-cell:active {
+  transform: scale(0.98);
+  filter: brightness(0.9);
+}
+
+.keno-cell:disabled {
+  cursor: default;
+}
+
+.keno-cell--idle:not(:disabled):hover {
+  transform: scale(1.08);
+}
+
+/* The dominant color players actually see is the inset ::before "inner face"
+   layer, not the base element's own background — that's just the thin 6px
+   border ring. So each state has to recolor ::before to actually be
+   visible; the rules on the base .keno-cell itself only handle the
+   glow/scale/text treatment. */
+.keno-cell--picked::before {
+  background: linear-gradient(135deg,  #2bd600 0%, #008204 45%, #2bd600 100%);
+  box-shadow:
+    inset 0 5px 8px rgba(200, 255, 220, 0.5),
+    inset 0 -8px 10px rgba(5, 60, 35, 0.65);
+}
+
+.keno-cell--picked {
+  color: #ffc7c7;
+  text-shadow: 0 1px 0 rgba(255, 0, 0, 0.4);
+  filter: brightness(1.05) drop-shadow(0 0 8px rgba(209, 4, 4, 0.6));
+  transform: scale(1.05);
+}
+
+.keno-cell--miss::before {
+  background: linear-gradient(135deg, #ff6b5e 0%, #d61f1f 55%, #7a0d0d 100%);
+  box-shadow:
+    inset 0 5px 8px rgba(255, 180, 170, 0.4),
+    inset 0 -8px 10px rgba(60, 5, 5, 0.65);
+}
+
+.keno-cell--miss {
+  color: #ffc7c7;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  animation: keno-land 0.35s ease-out;
+}
+
+.keno-cell--hit::before {
+  background: linear-gradient(135deg, #ffcc00 0%,  #f8d820 50%, #e0c56b 100%);
+  box-shadow:
+    inset 0 5px 8px rgba(255, 240, 180, 0.55),
+    inset 0 -8px 10px rgba(90, 70, 0, 0.6);
+}
+
+.keno-cell--hit {
+  color: #ffc7c7;
+  -webkit-text-stroke: 2px #bd4f3b;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  filter: brightness(1.05) drop-shadow(0 0 10px rgba(255, 204, 0, 0.75));
+  animation: keno-land 0.4s ease-out;
+}
+.keno-cell span {
+  font-size: 40px;
+}
+@keyframes keno-land {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.keno-board-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 0 4px;
+  width: 100%;
+}
+
+/* ---------- Right rail: classic green-cabinet control panel ----------
+   Deliberately its own palette (green felt + red 3D buttons + black neon-oval
+   Exit/Help) rather than the black/gold used everywhere else in Hexa Keno —
+   this rail is styled after generic slot-cabinet control panels (a very
+   common, non-brand-specific convention), not the rest of the board. */
+
+.keno-side-right {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+   background: linear-gradient(
+    to right,
+    #004d2a 0%,
+    #006b3a 20%,
+    #087c43 50%,
+    #006b3a 80%,
+    #004d2a 100%
+  );
+  border: 3px solid #8a6a3a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.keno-side-right > * {
+  border-bottom: 2px solid #8a6a3a;
+  padding: 10px 12px;
+}
+
+.keno-side-right > *:last-child {
+  border-bottom: none;
+}
+
+.keno-rail-topbtns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.keno-oval-btn {
+  position: relative;
+  width: 80%;
+  height: 75px;
+  margin: 12px auto;
+
+  border-radius: 50%;
+
+  background: linear-gradient(
+    to right,
+    #050505 0%,
+    #111111 45%,
+    #3c3c3c 100%
+  );
+
+  box-shadow:
+    -10px 0 0 #20cfa7,
+    -7px 0 0 #087d63,
+    0 4px 3px rgba(0, 0, 0, 0.45);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+  overflow: hidden;
+  font-size: 22px;
+  font-weight: 700;
+  color: #39ff52;
+}
+
+.keno-oval-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 0 0 1px rgba(77, 255, 240, 0.25),
+    0 1px 0 #06110f;
+}
+
+.keno-rail-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.keno-rail-readout-label {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: #66FF00;
+  text-shadow: 0 0 2px #39ff14;
+}
+
+.keno-rail-readout-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #6fe0ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.keno-rail-picks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.keno-hud-tiny-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #ffc7c7;
+  font-weight: 600;
+}
+
+.keno-hud-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f3f3f3;
+  font-variant-numeric: tabular-nums;
+}
+
+.keno-maxbet-btn {
+  display: inline-block;
+  min-width: 100%;
+  height: 75px;
+  padding: 0 24px;
+
+  background: linear-gradient(
+    to bottom,
+    #ff3b3b 0%,
+    #ff2424 45%,
+    #d90d0d 100%
+  );
+
+  border: 5px solid #a84a35;
+  border-radius: 4px;
+
+  box-shadow:
+    inset 0 4px 0 #ffd0c0,
+    inset 0 -7px 0 #8e0909,
+    inset 3px 3px 0 #ff8a72,
+    inset -3px -5px 0 #b20c0c,
+    0 2px 0 #6b2b20,
+    0 3px 5px rgba(0, 0, 0, 0.5);
+
+  color: #39ff52;
+  font-size: 22px;
+  font-weight: 900;
+  font-family: Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+
+  text-shadow:
+    1px 1px 0 #08751a,
+    0 0 3px rgba(57, 255, 82, 0.5);
+
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.keno-maxbet-btn:hover {
+  transform: scale(1.03);
+
+  box-shadow:
+    inset 0 2px 0 #ffe0d5,
+    inset 0 -3px 0 #8e0909,
+    inset 3px 0 0 #ff9b86,
+    inset -3px 0 0 #b20c0c,
+    0 0 10px rgba(255, 60, 40, 0.7),
+    0 3px 6px rgba(0, 0, 0, 0.5);
+}
+
+.keno-maxbet-btn:active {
+  transform: scale(0.98);
+}
+
+.keno-maxbet-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.keno-rail-bet-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.keno-rail-bet-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #6fe0ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.keno-bet-trapezoid {
+  position: relative;
+  width: 100%;
+  height: 55px;
+  border: 5px solid #a84a35;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+
+  background: linear-gradient(
+    180deg,
+    #ff6b5e 0%,
+    #ff2929 35%,
+    #d61f1f 65%,
+    #8f0d0d 100%
+  );
+
+  color: #66ff00;
+  text-shadow:
+    0 0 2px #000,
+    1px 1px 0 #004400;
+
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 0.5;
+
+  box-shadow:
+    inset 0 4px 0 rgba(255, 255, 255, 0.45),
+    inset 0 7px 0 rgba(255, 120, 120, 0.35),
+    inset 0 -7px 0 rgba(90, 0, 0, 0.45),
+    inset 5px 0 0 rgba(190, 25, 25, 0.7),
+    inset -5px 0 0 rgba(190, 25, 25, 0.7);
+
+  z-index: 1;
+}
+
+.keno-bet-trapezoid:not(:disabled):hover {
+  filter:
+    brightness(1.12)
+    drop-shadow(0 2px 0 #f0cdb5)
+    drop-shadow(0 4px 4px rgba(0, 0, 0, 0.7));
+
+  transform: translateY(-1px);
+}
+
+.keno-bet-trapezoid:not(:disabled):active {
+  transform: translateY(2px);
+
+  box-shadow:
+    inset 0 6px 0 rgba(90, 0, 0, 0.35),
+    inset 0 -3px 0 rgba(255, 100, 100, 0.25);
+}
+
+.keno-bet-trapezoid:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+}
+
+.keno-action-btn {
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(124, 1, 1, 0.685);
+  background: linear-gradient(160deg, #cc5555, #d10f01);
+  color: #f7ca06;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #9e2626;
+}
+
+.keno-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.keno-play-button {
+  margin-top: auto;
+  display: inline-block;
+  min-width: 100%;
+  height: 75px;
+  padding: 0 10px;
+
+  background: linear-gradient(
+    to bottom,
+    #ff3b3b 0%,
+    #ff2424 45%,
+    #d90d0d 100%
+  );
+
+  border: 5px solid #a84a35;
+  border-radius: 4px;
+
+  box-shadow:
+    inset 0 4px 0 #ffd0c0,
+    inset 0 -7px 0 #8e0909,
+    inset 3px 3px 0 #ff8a72,
+    inset -3px -5px 0 #b20c0c,
+    0 2px 0 #6b2b20,
+    0 3px 5px rgba(0, 0, 0, 0.5);
+
+  color: #39ff52;
+  font-size: 25px;
+  font-weight: 900;
+  font-family: Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+
+  text-shadow:
+    1px 1px 0 #08751a,
+    0 0 3px rgba(57, 255, 82, 0.5);
+
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.keno-play-button:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 0 #6b0a0a;
+}
+
+.keno-play-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.keno-error {
+  position: fixed;
+  bottom: 50%;
+  left: 50%;
+  width: 100%;
+  text-align: center;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 35px;
+  font-weight: 700;
+  background: #000000ea;
+  color: #ffeeee;
+  padding: 8px 20px;
+}

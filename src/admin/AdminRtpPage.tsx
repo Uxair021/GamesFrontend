@@ -137,6 +137,16 @@ const TIER_LABELS: Record<TierKey, string> = {
   GRAPES: "Grapes (loss fruit — weight only)",
   LEMON: "Lemon (loss fruit — weight only)",
   STRAWBERRY: "Strawberry (loss fruit — weight only)",
+  diamondOne: "1x Diamond (anywhere)",
+  diamondTwo: "2x Diamond (anywhere)",
+  diamondThree: "3x Diamond (anywhere)",
+  dollarBonus: "$ Bonus Trigger",
+  dollarPoolFive: "Bonus pool: $5",
+  dollarPoolTen: "Bonus pool: $10",
+  dollarPoolTwenty: "Bonus pool: $20",
+  dollarPoolFifty: "Bonus pool: $50",
+  dollarPoolHundred: "Bonus pool: $100",
+  dollarPoolThousand: "Bonus pool: $1000",
 };
 
 const SHAMROCK_RULE_LABELS: Record<string, string> = {
@@ -293,6 +303,28 @@ const GAME_TIER_IMAGE_OVERRIDES: Partial<Record<string, Partial<Record<TierKey, 
   "rubber-duck": {
     BOAT: "/symbols/rubberDuck/boat.png",
     BONUS: "/symbols/rubberDuck/bonus.png",
+  },
+  // Top Dollar reuses "seven"/"tripleBar"/"doubleBar"/"singleBar"/"anyBar" from Buffalo 777 /
+  // 777 Fruity / 5x Rewind's shared tier keys, but has its own distinct artwork for all of them
+  // (frontEnd/public/symbols/dollarGame/) — without this override those rows fell back to
+  // TIER_IMAGES' Buffalo 777 art (or, for "seven", no image at all). diamondOne/Two/Three and
+  // dollarBonus/dollarPool* are Top Dollar-only keys with no TIER_IMAGES entry to fall back to.
+  "top-dollar": {
+    seven: "/symbols/dollarGame/7.png",
+    tripleBar: "/symbols/dollarGame/TripleBar.png",
+    doubleBar: "/symbols/dollarGame/doubleBar.png",
+    singleBar: "/symbols/dollarGame/singleBar.png",
+    anyBar: "/symbols/dollarGame/singleBar.png",
+    diamondOne: "/symbols/dollarGame/daimond.png",
+    diamondTwo: "/symbols/dollarGame/daimond.png",
+    diamondThree: "/symbols/dollarGame/daimond.png",
+    dollarBonus: "/symbols/dollarGame/dollar.png",
+    dollarPoolFive: "/symbols/dollarGame/dollar.png",
+    dollarPoolTen: "/symbols/dollarGame/dollar.png",
+    dollarPoolTwenty: "/symbols/dollarGame/dollar.png",
+    dollarPoolFifty: "/symbols/dollarGame/dollar.png",
+    dollarPoolHundred: "/symbols/dollarGame/dollar.png",
+    dollarPoolThousand: "/symbols/dollarGame/dollar.png",
   },
 };
 

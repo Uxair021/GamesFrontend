@@ -1,22 +1,58 @@
-import { gameRegistry } from "../games/registry";
+import { useState } from "react";
+import { CATEGORIES, gameRegistry, type GameCategory } from "../games/registry";
+import { Sidebar } from "../components/Sidebar";
+import { TopBar } from "../components/TopBar";
+import { HeroBanner } from "../components/HeroBanner";
+import { FilterChips } from "../components/FilterChips";
 import { GameCard } from "../components/GameCard";
 
 export function HomePage() {
-  return (
-    <div className="min-h-[calc(100vh-56px)] bg-slate-950">
-      <div className="border-b border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 px-6 py-12">
-        <div className="mx-auto max-w-5xl">
-          <h1 className="text-3xl font-black text-white">Welcome to Texas Slots</h1>
-          <p className="mt-2 text-slate-400">Pick a game and spin.</p>
-        </div>
-      </div>
+  const [category, setCategory] = useState<"all" | GameCategory>("all");
+  const [tagFilter, setTagFilter] = useState<"all" | "HOT" | "NEW">("all");
+  const [search, setSearch] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 md:grid-cols-3">
-          {gameRegistry.map((game) => (
-            <GameCard key={game.slug} slug={game.slug} name={game.name} description={game.description} />
-          ))}
-        </div>
+  const games = gameRegistry.filter((game) => {
+    if (category !== "all" && game.category !== category) return false;
+    if (tagFilter !== "all" && game.tag !== tagFilter) return false;
+    if (search.trim() && !game.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+      <Sidebar active={category} onSelect={setCategory} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <TopBar search={search} onSearchChange={setSearch} onMenuClick={() => setSidebarOpen(true)} />
+
+        <main className="flex-1 px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+          <HeroBanner />
+
+          <div className="mb-4 mt-6 flex flex-wrap items-center justify-between gap-3 sm:mb-5 sm:mt-8">
+            <h2 className="m-0 text-lg font-bold sm:text-xl">{CATEGORIES.find((c) => c.id === category)?.label}</h2>
+            <FilterChips active={tagFilter} onSelect={setTagFilter} />
+          </div>
+
+          {games.length > 0 ? (
+            <section className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-5">
+              {games.map((game) => (
+                <GameCard
+                  key={game.slug}
+                  slug={game.slug}
+                  name={game.name}
+                  description={game.description}
+                  tag={game.tag}
+                  status={game.status}
+                  thumbnailGradient={game.thumbnailGradient}
+                  icon={game.icon}
+                />
+              ))}
+            </section>
+          ) : (
+            <p className="text-slate-400">No games match your filters.</p>
+          )}
+        </main>
       </div>
     </div>
   );
