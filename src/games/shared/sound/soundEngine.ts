@@ -427,15 +427,19 @@ function pickAmericanVoice(): SpeechSynthesisVoice | undefined {
   );
 }
 
-let currentUtterance: SpeechSynthesisUtterance | null = null;
-
+/** Bumped by every cancelSpeech() (including the one at the top of every speak() call) — lets
+ * a speak() still waiting on ensureVoicesLoaded() notice it's been superseded (see below)
+ * instead of a plain currentUtterance flag, which can't catch that: cancelSpeech() runs
+ * synchronously, before the superseded call's utterance object even exists yet, so clearing a
+ * "current utterance" reference at that point cancels nothing. */
+let speechToken = 0;
 
 /** Stops whatever offer line is currently being spoken, if any — call this the instant the
  * player acts (Take It / Try Again), whether by their own click or an automatic Take It (the
  * last offer auto-accepts), so the voice never keeps talking over a screen transition that's
  * already moved on. Safe to call when nothing is speaking. */
 export function cancelSpeech(): void {
-  currentUtterance = null;
+  speechToken += 1;
   if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
 }
 
@@ -443,14 +447,23 @@ export function cancelSpeech(): void {
  * await it only if the caller actually needs to know when the line ends; the Top Dollar offer
  * announcements themselves are fire-and-forget so the Take-It/Try-Again buttons are usable
  * immediately, not gated on the voice finishing. Cancels any line already in progress first, so
- * two calls in a row can never overlap. */
+ * two calls in a row can never overlap — including the case where a second speak() lands while
+ * this one is still awaiting ensureVoicesLoaded(), which speechSynthesis.cancel() alone can't
+ * catch since there's no utterance to cancel yet at that point. */
 export function speak(text: string): Promise<void> {
   if (muted || typeof speechSynthesis === "undefined") return Promise.resolve();
   cancelSpeech();
+  const token = speechToken;
 
   return ensureVoicesLoaded().then(
     () =>
       new Promise((resolve) => {
+        // A newer speak()/cancelSpeech() call superseded this one while voices were still
+        // loading — don't let this stale line start playing after the fact.
+        if (token !== speechToken) {
+          resolve();
+          return;
+        }
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = "en-US";
         const voice = pickAmericanVoice();
@@ -459,7 +472,6 @@ export function speak(text: string): Promise<void> {
         utterance.pitch = 1.05;
         utterance.onend = () => resolve();
         utterance.onerror = () => resolve();
-        currentUtterance = utterance;
         speechSynthesis.speak(utterance);
       })
   );
