@@ -429,6 +429,7 @@ function pickAmericanVoice(): SpeechSynthesisVoice | undefined {
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 
+
 /** Stops whatever offer line is currently being spoken, if any — call this the instant the
  * player acts (Take It / Try Again), whether by their own click or an automatic Take It (the
  * last offer auto-accepts), so the voice never keeps talking over a screen transition that's
