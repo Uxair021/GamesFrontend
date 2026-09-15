@@ -125,7 +125,7 @@ const BAND_TOP_FRAC = 0.12;
 const BAND_BOTTOM_FRAC = 0.98;
 
 /** How long the vertical scroll between the base game and the bonus board takes. */
-const SCROLL_DURATION_MS = 900;
+const SCROLL_DURATION_MS = 2000;
 
 /** The selection glow is a blurred halo sitting behind the note sprite (padded out past its
  * edges, heavily blurred) rather than a brightness flash over it — reads like a CSS box-shadow
