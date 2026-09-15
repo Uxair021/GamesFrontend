@@ -2,8 +2,10 @@ import { BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { AnimatedGIF } from "@pixi/gif";
 import { BuffaloSymbol } from "../api";
 
-const FILLER_COUNT = 18;
 const SYMBOL_PADDING = 20;
+/** Fallback cell count consumed while decelerating, if a caller doesn't specify one — see
+ * spinTo(). Must be >= 3 (the 3 target cells alone take up that much travel). */
+const DEFAULT_DECEL_CELLS = 3;
 const GLOW_PULSE_PERIOD_MS = 520;
 /** How dim the non-payline (above/below) rows go while the payline is celebrating a win. */
 const NON_PAYLINE_DIM_ALPHA = 0.32;
@@ -13,7 +15,6 @@ export class Reel {
   private textures: Record<BuffaloSymbol, Texture>;
   private gifTemplates: Partial<Record<BuffaloSymbol, AnimatedGIF>>;
   private fillerPool: BuffaloSymbol[];
-  private pendingTimeouts: number[] = [];
   private pendingFrames: Array<() => void> = [];
   /**
    * y-index (in cellHeight units) the *next* prepended cell will take — always decreases
@@ -103,12 +104,27 @@ export class Reel {
    * top-to-bottom — new symbols fall into place from above the visible window, existing
    * ones continue down and out the bottom. Continues from whatever's currently displayed
    * (filler + target prepended above the existing cells, never a jump/flash at the start).
+   *
+   * Two phases, timed in *cells* rather than milliseconds so there's zero rounding slack
+   * between "how many filler symbols were queued up" and "how far the container actually
+   * travels" — that mismatch used to make deceleration overshoot its intended duration by a
+   * cell or more, inconsistently per reel. Multiple reels called with the same `speed` and
+   * `startTime` stay perfectly in lockstep for as long as they're all spinning, and only
+   * diverge once each starts landing:
+   *  1. Constant-speed phase — exactly `spinCells` cells scroll past at `speed` px/ms.
+   *     Callers stagger stops by passing a larger `spinCells` to later reels; the speed
+   *     itself never changes here, so reels given the same `speed` move identically.
+   *  2. Deceleration phase — eases from `speed` down to a stop, covering exactly
+   *     `decelCells` cells (the last 3 of which are the target itself). Its duration is
+   *     derived from that exact distance and `speed` so the ease-out's *initial* velocity
+   *     is exactly `speed` too — i.e. no jump/snap at the handoff from phase 1.
    */
   spinTo(
     target: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol],
-    duration: number,
-    delay: number,
-    fillerCount: number = FILLER_COUNT
+    spinCells: number,
+    speed: number,
+    decelCells: number = DEFAULT_DECEL_CELLS,
+    startTime: number = performance.now()
   ): Promise<void> {
     this.stopWinGlow();
     if (this.visibleCells.length === 0) {
@@ -117,30 +133,37 @@ export class Reel {
     }
 
     const startY = this.container.y;
-    const filler: BuffaloSymbol[] = Array.from({ length: fillerCount }, () => this.randomSymbol());
-    // Prepend order matters: filler first (ends up *below* the target, closer to the old
-    // stack — passes through the window first), then target BELOW->MIDDLE->ABOVE last, so
-    // "above" ends up the most-negative (topmost) of the three, per prependCells' contract.
-    this.prependCells(filler);
-    const targetCells = this.prependCells([target[2], target[1], target[0]]).reverse(); // -> [above, middle, below]
-
-    // After both prepend calls above, `nextSlotAbove` is exactly the "above" target cell's
-    // slot index (it was the very last decrement applied) — landing it at window-local y=0
-    // means the container must shift by the negation of that.
-    const finalY = -this.nextSlotAbove * this.cellHeight;
+    // Exactly `spinCells` cells' worth of travel time — no ceiling/buffer, so the topmost
+    // filler cell lands precisely at the window's top edge (never short, never spare) the
+    // instant phase 1 ends, keeping phase 2's distance calculation exact.
+    const spinMs = (spinCells * this.cellHeight) / speed;
+    this.prependCells(Array.from({ length: spinCells }, () => this.randomSymbol()));
 
     return new Promise((resolve) => {
       let rafId = 0;
-      const timeoutId = window.setTimeout(() => {
-        const start = performance.now();
+
+      const runDecelPhase = (decelStartY: number) => {
+        const cellsToLand = Math.max(decelCells, 3);
+        const extraFillerCount = cellsToLand - 3;
+        this.prependCells(Array.from({ length: extraFillerCount }, () => this.randomSymbol()));
+        // Prepend order matters: target BELOW->MIDDLE->ABOVE last, so "above" ends up the
+        // most-negative (topmost) of the three, per prependCells' contract.
+        const targetCells = this.prependCells([target[2], target[1], target[0]]).reverse(); // -> [above, middle, below]
+
+        const distance = cellsToLand * this.cellHeight;
+        const finalY = decelStartY + distance;
+        // Duration a `v(t) = speed * (1 - t/decelMs)^2` deceleration takes to cover
+        // `distance` — integrating that gives the same shape as the eased position curve
+        // below, so this exact decelMs makes the ease-out's starting speed land exactly on
+        // `speed` (see the doc comment above) with no rounding error, since `distance` here
+        // is exact (unlike the old ms-based version).
+        const decelMs = (3 * distance) / speed;
+
+        const phase2Start = performance.now();
         const tick = (now: number) => {
-          // Clamped to >=0 — see WinCelebration.tsx for why requestAnimationFrame's
-          // timestamp can otherwise come in marginally before `start`.
-          const t = Math.min(Math.max((now - start) / duration, 0), 1);
-          // Ease-out only — the reel snaps straight to full speed the instant it starts (no
-          // ramp-up), then decelerates smoothly into the landing.
+          const t = Math.min(Math.max((now - phase2Start) / decelMs, 0), 1);
           const eased = 1 - Math.pow(1 - t, 3);
-          this.container.y = startY + (finalY - startY) * eased;
+          this.container.y = decelStartY + distance * eased;
           if (t < 1) {
             rafId = requestAnimationFrame(tick);
           } else {
@@ -150,9 +173,26 @@ export class Reel {
           }
         };
         rafId = requestAnimationFrame(tick);
-      }, delay);
+      };
 
-      this.pendingTimeouts.push(timeoutId);
+      const tickPhase1 = (now: number) => {
+        // Clamped to >=0 — see WinCelebration.tsx for why requestAnimationFrame's
+        // timestamp can otherwise come in marginally before `startTime`.
+        const elapsed = Math.max(now - startTime, 0);
+        if (elapsed < spinMs) {
+          this.container.y = startY + speed * elapsed;
+          rafId = requestAnimationFrame(tickPhase1);
+        } else {
+          // Land exactly on the phase-1/phase-2 boundary within this same frame — otherwise
+          // the container would hold last frame's position for one extra frame (a visible
+          // stall) before phase 2's first tick catches it up.
+          const decelStartY = startY + speed * spinMs;
+          this.container.y = decelStartY;
+          runDecelPhase(decelStartY);
+        }
+      };
+      rafId = requestAnimationFrame(tickPhase1);
+
       this.pendingFrames.push(() => cancelAnimationFrame(rafId));
     });
   }
@@ -280,7 +320,6 @@ export class Reel {
 
   destroy(): void {
     this.stopWinGlow();
-    this.pendingTimeouts.forEach((id) => window.clearTimeout(id));
     this.pendingFrames.forEach((cancel) => cancel());
     this.container.destroy({ children: true });
   }

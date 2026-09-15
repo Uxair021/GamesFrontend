@@ -87,9 +87,7 @@ const OFFER_LABELS = ["First Offer", "Second Offer", "Third Offer", "Last Offer"
 function buildOfferSpeech(offerNumber: number, isLastOffer: boolean, amount: number): string {
   const label = OFFER_LABELS[offerNumber - 1] ?? `Offer ${offerNumber}`;
   const amountText = `${amount} dollar${amount === 1 ? "" : "s"}`;
-  return isLastOffer
-    ? `${label}: ${amountText}. Take it, it's the last offer.`
-    : `${label}: ${amountText}. Take it, or try again?`;
+  return isLastOffer ? `${label}: ${amountText}. This one's locked in.` : `${label}: ${amountText}. Take it, or try again?`;
 }
 
 /** Figures out which symbols actually made up a line win, purely from the returned reel grid —
@@ -330,6 +328,17 @@ export function TopDollarGame() {
     }
   }, [bonus, bonusBusy]);
 
+  // The last offer is auto-accepted (confirmed with user: no real choice left by then) — give
+  // the player a moment to see the number before it resolves on its own.
+  useEffect(() => {
+    if (!bonus?.isLastOffer) return;
+    const id = window.setTimeout(() => {
+      handleTakeIt();
+    }, 1600);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bonus?.isLastOffer, bonus?.bonusId]);
+
   const scaledWidth = CANVAS_WIDTH * fitScale;
   const scaledHeight = CANVAS_HEIGHT * fitScale;
 
@@ -365,28 +374,32 @@ export function TopDollarGame() {
 
             {bonus && (
               <div className="absolute inset-x-0 bottom-[10%] flex items-center w-full justify-center">
-                <div className="z-10 flex w-[70%] items-between justify-between gap-6">
-                  <button
-                    onClick={handleTakeIt}
-                    disabled={bonusBusy}
-                    className="rounded-2xl border-2 border-green-950 bg-gradient-to-b from-lime-300 via-green-500 to-green-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
-                  >
-                    TAKE IT
-                  </button>
-                  <div className="gap-10 rounded-xl border-2 border-amber-400 bg-black/70 px-8 py-3 text-center">
-                    <div className="text-lg font-bold uppercase tracking-wide text-amber-300">
-                      {OFFER_LABELS[bonus.offerNumber - 1] ?? `Offer ${bonus.offerNumber}`}
+                {!bonus.isLastOffer ? (
+                  <div className="z-10 flex w-[70%] items-between justify-between gap-6">
+                    <button
+                      onClick={handleTakeIt}
+                      disabled={bonusBusy}
+                      className="rounded-2xl border-2 border-green-950 bg-gradient-to-b from-lime-300 via-green-500 to-green-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
+                    >
+                      TAKE IT
+                    </button>
+                    <div className="gap-10 rounded-xl border-2 border-amber-400 bg-black/70 px-8 py-3 text-center">
+                      <div className="text-lg font-bold uppercase tracking-wide text-amber-300">
+                        {OFFER_LABELS[bonus.offerNumber - 1] ?? `Offer ${bonus.offerNumber}`}
+                      </div>
+                      <div className="text-5xl font-black text-white">${bonus.currentOffer.toFixed(2)}</div>
                     </div>
-                    <div className="text-5xl font-black text-white">${bonus.currentOffer.toFixed(2)}</div>
+                    <button
+                      onClick={handleTryAgain}
+                      disabled={bonusBusy}
+                      className="rounded-2xl border-2 border-red-950 bg-gradient-to-b from-orange-300 via-red-500 to-red-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
+                    >
+                      TRY AGAIN
+                    </button>
                   </div>
-                  <button
-                    onClick={handleTryAgain}
-                    disabled={bonusBusy || bonus.isLastOffer}
-                    className="rounded-2xl border-2 border-red-950 bg-gradient-to-b from-orange-300 via-red-500 to-red-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
-                  >
-                    TRY AGAIN
-                  </button>
-                </div>
+                ) : (
+                  <div className="text-lg font-bold uppercase tracking-wide text-white/80">Locking in this offer...</div>
+                )}
               </div>
             )}
           </div>
