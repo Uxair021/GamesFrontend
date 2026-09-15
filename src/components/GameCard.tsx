@@ -15,6 +15,11 @@ import rubberDuckThumbnail from "../../public/symbols/rubberDuck/thumbnail.png";
 // No dedicated thumbnail.png shipped for this game yet — reusing the Top Dollar logo medallion
 // as a reasonable stand-in until a real card thumbnail is provided.
 import topDollarThumbnail from "../../public/symbols/dollarGame/thumbnail.png";
+
+// Gems Deluxe is a duplicate of Top Dollar reskinned under a new name — reuses the same
+// placeholder thumbnail (frontEnd/public/symbols/gemsDeluxe/) until real gem art is provided.
+import gemsDeluxeThumbnail from "../../public/symbols/gemsDeluxe/thumbnail.png";
+
 import hexaKenoThumbnail from "../../public/symbols/hexaKeno/thumbnail.png";
 import superKenoBallsThumbnail from "../../public/symbols/superKenoBall/thumbnail.png";
 
@@ -32,6 +37,9 @@ const THUMBNAILS: Record<string, string> = {
   "life-of-luxury": lifeOfLuxuryThumbnail,
   "rubber-duck": rubberDuckThumbnail,
   "top-dollar": topDollarThumbnail,
+
+  "gems-deluxe": gemsDeluxeThumbnail,
+
   "hexa-keno": hexaKenoThumbnail,
   "super-keno-balls": superKenoBallsThumbnail,
 };

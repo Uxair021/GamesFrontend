@@ -326,6 +326,26 @@ const GAME_TIER_IMAGE_OVERRIDES: Partial<Record<string, Partial<Record<TierKey, 
     dollarPoolHundred: "/symbols/dollarGame/dollar.png",
     dollarPoolThousand: "/symbols/dollarGame/dollar.png",
   },
+  // Gems Deluxe is a duplicate of Top Dollar under a new name/id — same tier keys, same
+  // placeholder artwork, now served from its own symbols folder (frontEnd/public/symbols/
+  // gemsDeluxe/) until real gem art replaces it.
+  "gems-deluxe": {
+    seven: "/symbols/gemsDeluxe/7.png",
+    tripleBar: "/symbols/gemsDeluxe/TripleBar.png",
+    doubleBar: "/symbols/gemsDeluxe/doubleBar.png",
+    singleBar: "/symbols/gemsDeluxe/singleBar.png",
+    anyBar: "/symbols/gemsDeluxe/singleBar.png",
+    diamondOne: "/symbols/gemsDeluxe/daimond.png",
+    diamondTwo: "/symbols/gemsDeluxe/daimond.png",
+    diamondThree: "/symbols/gemsDeluxe/daimond.png",
+    dollarBonus: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolFive: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolTen: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolTwenty: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolFifty: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolHundred: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolThousand: "/symbols/gemsDeluxe/dollar.png",
+  },
 };
 
 function tierImage(gameId: string, key: TierKey): string | undefined {
