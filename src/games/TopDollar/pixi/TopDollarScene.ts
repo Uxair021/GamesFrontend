@@ -125,7 +125,7 @@ const BAND_TOP_FRAC = 0.12;
 const BAND_BOTTOM_FRAC = 0.98;
 
 /** How long the vertical scroll between the base game and the bonus board takes. */
-const SCROLL_DURATION_MS = 900;
+const SCROLL_DURATION_MS = 2000;
 
 /** The selection glow is a blurred halo sitting behind the note sprite (padded out past its
  * edges, heavily blurred) rather than a brightness flash over it — reads like a CSS box-shadow
@@ -207,8 +207,11 @@ export class TopDollarScene {
     this.buildBonusBundles(topScreen, noteTexture);
 
     this.camera.addChild(topScreen, bottomScreen);
-    // Start showing the bottom (base game) screen.
-    this.camera.y = -CANVAS_HEIGHT;
+    // Start showing the top screen — TopDollarGame plays a brief intro (hold, then scroll down
+    // via scrollToBase) before enabling the base game's controls, so the player sees the
+    // branded bonus board once before dropping into gameplay (confirmed with user — same intro
+    // GemsDeluxe already has).
+    this.camera.y = 0;
   }
 
   /** Draws the neon payline: a glowing horizontal line from `left` to `right` at `y`, with an

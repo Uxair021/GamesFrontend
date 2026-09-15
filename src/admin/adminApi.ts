@@ -1301,6 +1301,45 @@ function computeTopDollarRtpPercent(config: PaytableConfig): number {
   return (lineEV + bonusRtp) * 100;
 }
 
+/** Gems Deluxe only — a duplicate of Top Dollar under a new name/id, same mechanics. Mirrors
+ * TOP_DOLLAR_OFFER_DRAW_COUNT_WEIGHTS above (backEnd/src/games/GemsDeluxe/config.ts's
+ * OFFER_DRAW_COUNT_WEIGHTS). */
+const GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS = [
+  { count: 1, weight: 40 },
+  { count: 2, weight: 40 },
+  { count: 3, weight: 20 },
+];
+
+/** Gems Deluxe only — mirrors TOP_DOLLAR_MIN_BET above. */
+const GEMS_DELUXE_MIN_BET = 10;
+
+/** Mirrors the backend's computeGemsDeluxeRtpPercent (backEnd/src/services/paytableConfig.ts) —
+ * identical formula to computeTopDollarRtpPercent above, since Gems Deluxe is a duplicate game. */
+function computeGemsDeluxeRtpPercent(config: PaytableConfig): number {
+  const lineEV = config.tiers.reduce(
+    (sum, t) => sum + (t.payoutMultiplier !== null ? (t.frequencyPercent / 100) * t.payoutMultiplier : 0),
+    0
+  );
+
+  const bonusTier = config.tiers.find((t) => t.key === "dollarBonus");
+  const bonusProb = (bonusTier?.frequencyPercent ?? 0) / 100;
+
+  const pool = config.specialReelTiers ?? [];
+  const poolTotal = pool.reduce((sum, t) => sum + t.frequencyPercent, 0);
+  const poolMean =
+    poolTotal > 0 ? pool.reduce((sum, t) => sum + (t.frequencyPercent / poolTotal) * (t.payoutMultiplier ?? 0), 0) : 0;
+  const drawCountTotal = GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + w.weight, 0);
+  const eDrawCount =
+    drawCountTotal > 0
+      ? GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + (w.weight / drawCountTotal) * w.count, 0)
+      : 0;
+  const eOffer = eDrawCount * poolMean;
+
+  const bonusRtp = GEMS_DELUXE_MIN_BET > 0 ? (bonusProb * eOffer) / GEMS_DELUXE_MIN_BET : 0;
+
+  return (lineEV + bonusRtp) * 100;
+}
+
 /**
  * Mirrors the backend's computeRtpPercent (backEnd/src/services/paytableConfig.ts) so the
  * admin page can show the effective RTP live, before the admin ever hits Save.
@@ -1308,6 +1347,10 @@ function computeTopDollarRtpPercent(config: PaytableConfig): number {
 export function computeRtpPercent(config: PaytableConfig): number {
   if (config.gameId === "top-dollar") {
     return computeTopDollarRtpPercent(config);
+  }
+
+  if (config.gameId === "gems-deluxe") {
+    return computeGemsDeluxeRtpPercent(config);
   }
 
   if (config.gameId === "rubber-duck") {

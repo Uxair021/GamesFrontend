@@ -2,17 +2,16 @@ import { useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
-import { TopDollarScene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/TopDollarScene";
+import { GemsDeluxeScene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/GemsDeluxeScene";
 import {
-  getTopDollarConfig,
+  getGemsDeluxeConfig,
   spinRequest,
-  bonusAdvanceRequest,
   bonusResolveRequest,
-  TopDollarConfigResponse,
+  GemsDeluxeConfigResponse,
   PayoutRow,
   SpinResponseBonus,
   ReelResult,
-  TopDollarSymbol,
+  GemsDeluxeSymbol,
 } from "./api";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { useFitScale } from "../shared/useFitScale";
@@ -42,22 +41,22 @@ const PAYOUT_LABELS: Record<PayoutRow["key"], string> = {
   DIAMOND_ONE: "1× Diamond",
 };
 
-/** This game's own symbol art (frontEnd/public/symbols/dollarGame/) — used to illustrate the
+/** This game's own symbol art (frontEnd/public/symbols/gemsDeluxe/) — used to illustrate the
  * paytable in the info popup with the actual symbols instead of text-only labels, per user
  * request ("use this game symbols to define the rules"). Same raw files pixi/symbols.ts loads
  * for the reels (that module chroma-keys them for canvas use; here the plain white-card PNG is
  * shown directly, which reads fine since it matches the reel window's own white-glass look). */
-const SYMBOL_ICON_SRC: Record<TopDollarSymbol, string> = {
-  SEVEN: "/symbols/dollarGame/7.png",
-  TRIPLE_BAR: "/symbols/dollarGame/TripleBar.png",
-  DOUBLE_BAR: "/symbols/dollarGame/doubleBar.png",
-  SINGLE_BAR: "/symbols/dollarGame/singleBar.png",
-  DIAMOND: "/symbols/dollarGame/daimond.png",
-  DOLLAR: "/symbols/dollarGame/dollar.png",
+const SYMBOL_ICON_SRC: Record<GemsDeluxeSymbol, string> = {
+  SEVEN: "/symbols/gemsDeluxe/7.png",
+  TRIPLE_BAR: "/symbols/gemsDeluxe/TripleBar.png",
+  DOUBLE_BAR: "/symbols/gemsDeluxe/doubleBar.png",
+  SINGLE_BAR: "/symbols/gemsDeluxe/singleBar.png",
+  DIAMOND: "/symbols/gemsDeluxe/daimond.png",
+  DOLLAR: "/symbols/gemsDeluxe/dollar.png",
 };
 
 /** Which symbols (and how many) illustrate each paytable row. */
-const PAYOUT_ICONS: Record<PayoutRow["key"], TopDollarSymbol[]> = {
+const PAYOUT_ICONS: Record<PayoutRow["key"], GemsDeluxeSymbol[]> = {
   SEVEN: ["SEVEN", "SEVEN", "SEVEN"],
   TRIPLE_BAR: ["TRIPLE_BAR", "TRIPLE_BAR", "TRIPLE_BAR"],
   DOUBLE_BAR: ["DOUBLE_BAR", "DOUBLE_BAR", "DOUBLE_BAR"],
@@ -68,7 +67,7 @@ const PAYOUT_ICONS: Record<PayoutRow["key"], TopDollarSymbol[]> = {
   DIAMOND_ONE: ["DIAMOND"],
 };
 
-function SymbolIcon({ symbol, size = 32 }: { symbol: TopDollarSymbol; size?: number }) {
+function SymbolIcon({ symbol, size = 32 }: { symbol: GemsDeluxeSymbol; size?: number }) {
   return (
     <img
       src={SYMBOL_ICON_SRC[symbol]}
@@ -79,23 +78,25 @@ function SymbolIcon({ symbol, size = 32 }: { symbol: TopDollarSymbol; size?: num
   );
 }
 
-const OFFER_LABELS = ["First Offer", "Second Offer", "Third Offer", "Last Offer"];
-
-/** What gets spoken (see soundEngine's speak) each time an offer is revealed — the last offer
- * auto-accepts with no real choice, so it gets its own line instead of asking a question the
- * player can't actually act on. */
-function buildOfferSpeech(offerNumber: number, isLastOffer: boolean, amount: number): string {
-  const label = OFFER_LABELS[offerNumber - 1] ?? `Offer ${offerNumber}`;
+/** What gets spoken (see soundEngine's speak) the instant the picked gem's amount pops out —
+ * there's no Take It/Try Again ladder here, one gem pick is the whole bonus round, so this is
+ * just an announcement, not a question. */
+function buildOfferSpeech(amount: number): string {
   const amountText = `${amount} dollar${amount === 1 ? "" : "s"}`;
-  return isLastOffer ? `${label}: ${amountText}. This one's locked in.` : `${label}: ${amountText}. Take it, or try again?`;
+  return `You won ${amountText}!`;
 }
 
 /** Figures out which symbols actually made up a line win, purely from the returned reel grid —
  * the backend doesn't send winning positions explicitly, but this game's outcome tiers are
  * mutually exclusive (see backend engine.ts's rollTier) so the pattern alone is enough to tell:
  * either the 3 payline (middle-row) symbols form the win (7s/bars, matching or mixed), or — if
- * they don't — it's a diamond-count win, scored from every DIAMOND showing anywhere on the grid.
- * Returns one row-index array per reel (0=above, 1=middle, 2=below) for Reel.playWinHighlight. */
+ * they don't — it's a diamond-count win. Diamond only ever scores from the PAYLINE row (index
+ * 1) — engine.ts's buildLineForTier places diamondOne/Two/Three's diamonds exclusively there,
+ * the above/below rows are pure random filler that can coincidentally also render as DIAMOND
+ * with nothing to do with the actual win, so those must never be highlighted (checking every
+ * row here was the bug: a decorative DIAMOND landing off the payline in one reel lit up
+ * alongside a real payline DIAMOND in another). Returns one row-index array per reel (0=above,
+ * 1=middle, 2=below) for Reel.playWinHighlight. */
 function computeWinHighlightRows(reels: [ReelResult, ReelResult, ReelResult]): [number[], number[], number[]] {
   const middle = reels.map((r) => r.symbols[1]);
   const isBar = (s: string) => s === "TRIPLE_BAR" || s === "DOUBLE_BAR" || s === "SINGLE_BAR";
@@ -103,31 +104,24 @@ function computeWinHighlightRows(reels: [ReelResult, ReelResult, ReelResult]): [
 
   if (paylineWin) return [[1], [1], [1]];
 
-  return reels.map((r) => r.symbols.flatMap((s, row) => (s === "DIAMOND" ? [row] : []))) as [
-    number[],
-    number[],
-    number[],
-  ];
+  return reels.map((r) => (r.symbols[1] === "DIAMOND" ? [1] : [])) as [number[], number[], number[]];
 }
 
 interface BonusUiState {
   bonusId: string;
-  currentOffer: number;
-  offerNumber: number;
-  offerCount: number;
-  isLastOffer: boolean;
+  amount: number;
 }
 
-export function TopDollarGame() {
+export function GemsDeluxeGame() {
   const { user, setBalance } = useAuth();
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
-  const sceneRef = useRef<TopDollarScene | null>(null);
+  const sceneRef = useRef<GemsDeluxeScene | null>(null);
   const appRef = useRef<Application | null>(null);
   const gameCardRef = useRef<HTMLDivElement | null>(null);
   const fitScale = useFitScale([gameCardRef], { fillViewport: true });
 
   const [ready, setReady] = useState(false);
-  const [config, setConfig] = useState<TopDollarConfigResponse | null>(null);
+  const [config, setConfig] = useState<GemsDeluxeConfigResponse | null>(null);
   const [betLevels, setBetLevels] = useState<number[]>(DEFAULT_BET_LEVELS);
   const [betIndex, setBetIndex] = useState(0);
   const [spinning, setSpinning] = useState(false);
@@ -152,7 +146,7 @@ export function TopDollarGame() {
   const betAmount = betLevels[betIndex] ?? betLevels[0];
 
   useEffect(() => {
-    getTopDollarConfig()
+    getGemsDeluxeConfig()
       .then((c) => {
         setConfig(c);
         setBetLevels(c.betLevels);
@@ -166,8 +160,8 @@ export function TopDollarGame() {
     let cancelled = false;
     // Kicks off the background-music fetch/decode now, in parallel with the Pixi/loading-screen
     // work below, so it's already cached by the time the intro scroll starts (it used to first
-    // load right as the scroll began, and that decode/trim work landing mid-scroll was a jerk/
-    // hitch — same fix as GemsDeluxe).
+    // load right as the scroll began, and that decode/trim work landing mid-scroll was the
+    // jerk/hitch the player saw — confirmed with user).
     sound.preloadBackgroundMusic(BG_MUSIC_URL, BG_MUSIC_TRIM_END_SECONDS);
     const app = new Application();
 
@@ -186,7 +180,7 @@ export function TopDollarGame() {
         }
         appRef.current = app;
         canvasHostRef.current.appendChild(app.canvas);
-        const scene = await TopDollarScene.create(app);
+        const scene = await GemsDeluxeScene.create(app);
         if (cancelled) {
           scene.destroy();
           return;
@@ -211,7 +205,7 @@ export function TopDollarGame() {
   }, []);
 
   // Keeps the LCD-style BET/WIN readout baked into the reel window in sync — see
-  // TopDollarScene's buildReadouts/updateReadouts.
+  // GemsDeluxeScene's buildReadouts/updateReadouts.
   useEffect(() => {
     if (!ready) return;
     sceneRef.current?.updateReadouts(betAmount, winAmount);
@@ -255,25 +249,26 @@ export function TopDollarGame() {
         // Call out the DOLLAR symbol with the same glow/scale highlight a line win gets, and
         // start the bonus bell ringing — both run for 2s before the screen scrolls up. The bell
         // keeps ringing through the scroll and the pause that follows it, right up until the
-        // bundle-selection chase actually starts (confirmed with user: this exact sequencing).
+        // gem grid actually appears (confirmed with user: this exact sequencing).
         sceneRef.current.playWinHighlights(DOLLAR_HIGHLIGHT_ROWS);
         sound.startBonusAlarmLoop();
-        await new Promise((resolve) => setTimeout(resolve, 3500));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         sceneRef.current.clearWinHighlights();
         setBonusViewActive(true);
         await sceneRef.current.scrollToBonus();
         await new Promise((resolve) => setTimeout(resolve, 1750));
         sound.stopBonusAlarmLoop();
-        await sceneRef.current.playBundleSelection(bonusResult.currentOffer);
-        setBonus({
-          bonusId: bonusResult.bonusId,
-          currentOffer: bonusResult.currentOffer,
-          offerNumber: bonusResult.offerNumber,
-          offerCount: bonusResult.offerCount,
-          isLastOffer: bonusResult.isLastOffer,
+        // Fire-and-forget — tells the player what to do the instant the grid appears, paired
+        // with the pulsing "PICK A GEM!" text (see GemsDeluxeScene's startGemIdle).
+        sound.speak("Pick a gem!");
+        // Waits for the player to tap one of the 8 gems, then plays its shake/blast/number-pop
+        // reveal — there's no Try Again here, this single pick is the whole bonus round.
+        await sceneRef.current.showGemPicker(bonusResult.currentOffer, {
+          onShake: () => sound.playShakeRattle(),
+          onBlast: () => sound.playBurst(),
+          onReveal: (amount) => sound.speak(buildOfferSpeech(amount)),
         });
-        // Fire-and-forget — the buttons are usable immediately, not gated on the line finishing.
-        sound.speak(buildOfferSpeech(bonusResult.offerNumber, bonusResult.isLastOffer, bonusResult.currentOffer));
+        setBonus({ bonusId: bonusResult.bonusId, amount: bonusResult.currentOffer });
       } else {
         setWinAmount(result.winAmount);
         if (result.winAmount > 0) {
@@ -290,17 +285,20 @@ export function TopDollarGame() {
 
   const handleTakeIt = useCallback(async () => {
     if (!bonus || bonusBusy) return;
-    // The offer line may still be talking (or this may be the last offer's auto-accept firing
-    // mid-sentence) — stop it immediately rather than let it keep going over the resolve/scroll.
+    // The reveal line may still be talking — stop it immediately rather than let it keep going
+    // over the payout animation.
     sound.cancelSpeech();
     setBonusBusy(true);
     try {
+      // Spin/drop the revealed amount down toward the credit meter before actually crediting it.
+      sound.playSweepDown();
+      await sceneRef.current?.playTakeItPayout();
       const res = await bonusResolveRequest(bonus.bonusId);
       setBalance(res.balance);
       setWinAmount(res.winAmount);
-      // Hide the offer buttons immediately, before the scroll even starts — otherwise they stay
+      // Hide the TAKE IT button immediately, before the scroll even starts — otherwise it stays
       // mounted (fixed on screen) for the whole ~900ms scroll while the bonus board slides away
-      // underneath them, which reads as the buttons themselves sliding down with it.
+      // underneath it, which reads as the button itself sliding down with it.
       setBonus(null);
       await sceneRef.current?.scrollToBase();
       setBonusViewActive(false);
@@ -310,34 +308,6 @@ export function TopDollarGame() {
       setBonusBusy(false);
     }
   }, [bonus, bonusBusy, setBalance]);
-
-  const handleTryAgain = useCallback(async () => {
-    if (!bonus || bonusBusy || bonus.isLastOffer) return;
-    // Stop the current offer's line before rolling the next one.
-    sound.cancelSpeech();
-    setBonusBusy(true);
-    try {
-      const res = await bonusAdvanceRequest(bonus.bonusId);
-      await sceneRef.current?.playBundleSelection(res.currentOffer);
-      setBonus((prev) => (prev ? { ...prev, ...res } : prev));
-      sound.speak(buildOfferSpeech(res.offerNumber, res.isLastOffer, res.currentOffer));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not advance bonus");
-    } finally {
-      setBonusBusy(false);
-    }
-  }, [bonus, bonusBusy]);
-
-  // The last offer is auto-accepted (confirmed with user: no real choice left by then) — give
-  // the player a moment to see the number before it resolves on its own.
-  useEffect(() => {
-    if (!bonus?.isLastOffer) return;
-    const id = window.setTimeout(() => {
-      handleTakeIt();
-    }, 1600);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bonus?.isLastOffer, bonus?.bonusId]);
 
   const scaledWidth = CANVAS_WIDTH * fitScale;
   const scaledHeight = CANVAS_HEIGHT * fitScale;
@@ -374,32 +344,13 @@ export function TopDollarGame() {
 
             {bonus && (
               <div className="absolute inset-x-0 bottom-[10%] flex items-center w-full justify-center">
-                {!bonus.isLastOffer ? (
-                  <div className="z-10 flex w-[70%] items-between justify-between gap-6">
-                    <button
-                      onClick={handleTakeIt}
-                      disabled={bonusBusy}
-                      className="rounded-2xl border-2 border-green-950 bg-gradient-to-b from-lime-300 via-green-500 to-green-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
-                    >
-                      TAKE IT
-                    </button>
-                    <div className="gap-10 rounded-xl border-2 border-amber-400 bg-black/70 px-8 py-3 text-center">
-                      <div className="text-lg font-bold uppercase tracking-wide text-amber-300">
-                        {OFFER_LABELS[bonus.offerNumber - 1] ?? `Offer ${bonus.offerNumber}`}
-                      </div>
-                      <div className="text-5xl font-black text-white">${bonus.currentOffer.toFixed(2)}</div>
-                    </div>
-                    <button
-                      onClick={handleTryAgain}
-                      disabled={bonusBusy}
-                      className="rounded-2xl border-2 border-red-950 bg-gradient-to-b from-orange-300 via-red-500 to-red-700 px-8 py-3 text-2xl font-black italic text-white shadow-lg disabled:opacity-50"
-                    >
-                      TRY AGAIN
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-lg font-bold uppercase tracking-wide text-white/80">Locking in this offer...</div>
-                )}
+                <button
+                  onClick={handleTakeIt}
+                  disabled={bonusBusy}
+                  className="z-10 rounded-2xl border-2 border-green-950 bg-gradient-to-b from-lime-300 via-green-500 to-green-700 px-12 py-4 text-5xl font-black italic text-white shadow-lg disabled:opacity-50"
+                >
+                  TAKE IT
+                </button>
               </div>
             )}
           </div>
@@ -419,40 +370,51 @@ export function TopDollarGame() {
               float over the bonus board art instead, which already has its own Take-It/Try-Again
               controls. */}
           {!bonusViewActive && introDone && (
-            <div className="absolute inset-x-0 top-[48%] bottom-[5%] flex items-center justify-between gap-3 pl-[180px] pr-[180px]">
-              <div className="flex items-center gap-3">
-                <CtrlButton onClick={() => setShowPaytable((v) => !v)} ariaLabel="Paytable" className="h-20 w-20">
-                  <InfoIcon />
-                </CtrlButton>
-                <CtrlButton
-                  onClick={() => {
-                    sound.resumeAudio();
-                    setMuted(sound.toggleMuted());
-                  }}
-                  active={muted}
-                  ariaLabel={muted ? "Unmute" : "Mute"}
-                  className="h-20 w-20"
-                >
-                  <SoundIcon muted={muted} />
-                </CtrlButton>
-              </div>
-              <div>
-                <CreditScreen balance={user?.balance ?? 0} />
-              </div>
+            // The cabinet's control-deck panel (baked into bottomScreen.png) has real painted
+            // perspective — it curves/recedes rather than sitting flat-on — so the previously
+            // flat HTML button row read as a 2D sticker pasted over a 3D surface (confirmed with
+            // user). perspective+rotateX here tilts the whole row back as one rigid plane (top
+            // edge receding toward the reels, bottom edge advancing toward the player) so it
+            // reads as mounted into that same deck instead of floating flat on top of it.
+            <div className="absolute inset-x-0 top-[51%] bottom-[5%]" style={{ perspective: "900px" }}>
+              <div
+                className="flex h-full items-center justify-between gap-3 pl-[180px] pr-[220px]"
+                style={{ transform: "rotateX(24deg)", transformOrigin: "50% 100%" }}
+              >
+                <div className="flex items-center gap-3">
+                  <CtrlButton onClick={() => setShowPaytable((v) => !v)} ariaLabel="Paytable" className="h-20 w-20">
+                    <InfoIcon />
+                  </CtrlButton>
+                  <CtrlButton
+                    onClick={() => {
+                      sound.resumeAudio();
+                      setMuted(sound.toggleMuted());
+                    }}
+                    active={muted}
+                    ariaLabel={muted ? "Unmute" : "Mute"}
+                    className="h-20 w-20"
+                  >
+                    <SoundIcon muted={muted} />
+                  </CtrlButton>
+                </div>
+                <div>
+                  <CreditScreen balance={user?.balance ?? 0} />
+                </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {betLevels.map((level, i) => (
-                  <BetButton
-                    key={level}
-                    value={level}
-                    active={i === betIndex}
-                    disabled={spinning}
-                    onClick={() => setBetIndex(i)}
-                  />
-                ))}
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {betLevels.map((level, i) => (
+                    <BetButton
+                      key={level}
+                      value={level}
+                      active={i === betIndex}
+                      disabled={spinning}
+                      onClick={() => setBetIndex(i)}
+                    />
+                  ))}
+                </div>
 
-              <SpinButton onClick={() => runSpin()} disabled={!ready || spinning || !introDone} spinning={spinning} />
+                <SpinButton onClick={() => runSpin()} disabled={!ready || spinning || !introDone} spinning={spinning} />
+              </div>
             </div>
           )}
         </div>
@@ -462,7 +424,7 @@ export function TopDollarGame() {
 
       {showLoadingScreen && (
         <LoadingScreen
-          title="Top Dollar"
+          title="Gems Deluxe"
           ready={ready}
           onDone={() => {
             setShowLoadingScreen(false);
@@ -482,7 +444,7 @@ function isDiamondRow(key: PayoutRow["key"]): boolean {
   return key === "DIAMOND_ONE" || key === "DIAMOND_TWO" || key === "DIAMOND_THREE";
 }
 
-function PaytableModal({ config, onClose }: { config: TopDollarConfigResponse; onClose: () => void }) {
+function PaytableModal({ config, onClose }: { config: GemsDeluxeConfigResponse; onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
@@ -557,23 +519,20 @@ function PaytableModal({ config, onClose }: { config: TopDollarConfigResponse; o
         </div>
         <div className="mt-1.5 text-center text-xs text-amber-100/50 sm:text-sm">on reel 3</div>
 
-        {/* Bonus-round summary — colored to match the real Take-It/Try-Again buttons so the
-            association is immediate regardless of language. */}
+        {/* Bonus-round summary — colored to match the real TAKE IT button so the association is
+            immediate regardless of language. */}
         <div className="mt-5 rounded-2xl bg-blue-900/40 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-center gap-3">
             <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-amber-300 bg-black/30 text-2xl font-black text-amber-300">
-              {config.offerCount}
+              8
             </span>
-            <span className="text-sm font-semibold uppercase tracking-wide text-blue-200 sm:text-base">Offers</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-blue-200 sm:text-base">Gems</span>
             <span className="rounded-xl border-2 border-green-950 bg-gradient-to-b from-lime-300 via-green-500 to-green-700 px-4 py-2 text-base font-black italic text-white shadow-md sm:text-lg">
               ✓ Take It
             </span>
-            <span className="rounded-xl border-2 border-red-950 bg-gradient-to-b from-orange-300 via-red-500 to-red-700 px-4 py-2 text-base font-black italic text-white shadow-md sm:text-lg">
-              ↻ Try Again
-            </span>
           </div>
           <div className="mt-3 text-center text-xs text-blue-200/70 sm:text-sm">
-            Take It banks the cash now. Try Again rolls the next offer. The last offer locks in automatically.
+            Pick one of the 8 gems to reveal your prize, then Take It to bank the cash.
           </div>
         </div>
       </div>
@@ -687,7 +646,7 @@ function SpinButton({ onClick, disabled, spinning }: { onClick: () => void; disa
       onClick={onClick}
       disabled={disabled}
       aria-label="Spin"
-      className="relative flex h-[120px] w-[240px] shrink-0 items-center justify-center rounded-2xl border-[6px] border-amber-300 bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 p-0 transition-transform duration-100 ease-out active:translate-y-[4px] disabled:opacity-50 disabled:active:translate-y-0"
+      className="relative flex h-[120px] w-[280px] shrink-0 items-center justify-center rounded-2xl border-[6px] border-amber-300 bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 p-0 transition-transform duration-100 ease-out active:translate-y-[4px] disabled:opacity-50 disabled:active:translate-y-0"
       style={{
         boxShadow:
           "0 8px 0 #5b1a0e, 0 0 22px 4px rgba(251,191,36,0.55), 0 14px 20px rgba(0,0,0,0.6), inset 0 3px 3px rgba(255,255,255,0.7), inset 0 -8px 12px rgba(0,0,0,0.35)",
@@ -705,7 +664,7 @@ function SpinButton({ onClick, disabled, spinning }: { onClick: () => void; disa
           "0 8px 0 #5b1a0e, 0 0 22px 4px rgba(251,191,36,0.55), 0 14px 20px rgba(0,0,0,0.6), inset 0 3px 3px rgba(255,255,255,0.7), inset 0 -8px 12px rgba(0,0,0,0.35)";
       }}
     >
-      <span className="absolute inset-1 rounded-2xl bg-gradient-to-b from-red-500 via-red-600 to-red-800" />
+      <span className="absolute inset-1 rounded-2xl bg-gradient-to-b from-green-500 via-green-600 to-green-800" />
       <span
         className="pointer-events-none absolute inset-x-[8%] top-[8%] h-[32%] rounded-2xl bg-white/45"
         style={{ filter: "blur(4px)" }}
@@ -719,7 +678,7 @@ function SpinButton({ onClick, disabled, spinning }: { onClick: () => void; disa
 
 /** The credit meter as a proper backlit LCD screen — dark glass, gold-lit bezel, Digital-7
  * digits — instead of plain text floating on the cabinet art. Same font Mega 10X Pay/Crazy 777
- * use for their own LCD-style readouts (see TopDollarScene's buildReadouts). */
+ * use for their own LCD-style readouts (see GemsDeluxeScene's buildReadouts). */
 function CreditScreen({ balance }: { balance: number }) {
   return (
     <div

@@ -18,6 +18,7 @@ import { vegasHitsMeta } from "./VegasHits/meta";
 import { lifeOfLuxuryMeta } from "./LifeOfLuxury/meta";
 import { rubberDuckMeta } from "./RubberDuck/meta";
 import { topDollarMeta } from "./TopDollar/meta";
+import { gemsDeluxeMeta } from "./GemsDeluxe/meta";
 import { hexaKenoMeta } from "./HexaKeno/meta";
 import { superKenoBallsMeta } from "./SuperKenoBalls/meta";
 
@@ -170,6 +171,16 @@ export const gameRegistry: GameRegistryEntry[] = [
     tag: "HOT",
     component: lazy(() =>
       import("./TopDollar/TopDollarGame").then((m) => ({ default: m.TopDollarGame }))
+    ),
+  },
+  {
+    slug: gemsDeluxeMeta.slug,
+    name: gemsDeluxeMeta.name,
+    description: gemsDeluxeMeta.description,
+    category: "slots",
+    tag: "NEW",
+    component: lazy(() =>
+      import("./GemsDeluxe/GemsDeluxeGame").then((m) => ({ default: m.GemsDeluxeGame }))
     ),
   },
   {
