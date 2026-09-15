@@ -228,7 +228,24 @@ export type TierKey =
   | "COCONUT"
   | "GRAPES"
   | "LEMON"
-  | "STRAWBERRY";
+  | "STRAWBERRY"
+  // Top Dollar only — reuses "loss"/"seven"/"tripleBar"/"doubleBar"/"singleBar"/"anyBar" above
+  // (all already exist with matching semantics); these are the new ones: the 3 Diamond-count
+  // tiers (Diamond pays just for showing up 1/2/3 times anywhere among the 3 reels) and the
+  // bonus-trigger tier. See backEnd/src/games/TopDollar/engine.ts.
+  | "diamondOne"
+  | "diamondTwo"
+  | "diamondThree"
+  | "dollarBonus"
+  // Top Dollar only — the bonus round's note-bundle value pool, stored in `specialReelTiers`.
+  // Each row's payoutMultiplier holds a FLAT dollar amount (not bet-scaled) instead of the usual
+  // bet-multiple — see backEnd/src/games/TopDollar/config.ts's REFERENCE_BONUS_POOL.
+  | "dollarPoolFive"
+  | "dollarPoolTen"
+  | "dollarPoolTwenty"
+  | "dollarPoolFifty"
+  | "dollarPoolHundred"
+  | "dollarPoolThousand";
 
 export interface TierRow {
   key: TierKey;
@@ -1238,11 +1255,104 @@ function computeRubberDuckRtpPercent(config: PaytableConfig): number {
   return (baseRtp + freeSpinRtp) * 100;
 }
 
+/** Top Dollar only — how many pool draws get summed into one bonus offer (not admin-tunable,
+ * kept as an engine constant on both sides — mirrors backEnd/src/games/TopDollar/config.ts's
+ * OFFER_DRAW_COUNT_WEIGHTS). */
+const TOP_DOLLAR_OFFER_DRAW_COUNT_WEIGHTS = [
+  { count: 1, weight: 40 },
+  { count: 2, weight: 40 },
+  { count: 3, weight: 20 },
+];
+
+/** Top Dollar only — the lowest bet level, used as the reference bet the bonus round's flat
+ * (non-bet-scaled) payouts get expressed relative to, same convention the backend's
+ * computeTopDollarRtpPercent uses (see backEnd/src/services/paytableConfig.ts). */
+const TOP_DOLLAR_MIN_BET = 10;
+
+/** Mirrors the backend's computeTopDollarRtpPercent (backEnd/src/services/paytableConfig.ts) —
+ * a plain line-tier EV plus the bonus round's own expected value (dollarBonus's trigger chance
+ * times the bonus pool's mean offer, expressed relative to the minimum bet since bonus payouts
+ * are flat dollar amounts, not bet-scaled). Without this branch, Top Dollar fell through to the
+ * generic `specialReelTiers` check below and got evaluated by computeCrazy777RtpPercent, whose
+ * tier keys don't match Top Dollar's dollarPool* pool — silently dropping the bonus round's
+ * contribution from the displayed RTP. */
+function computeTopDollarRtpPercent(config: PaytableConfig): number {
+  const lineEV = config.tiers.reduce(
+    (sum, t) => sum + (t.payoutMultiplier !== null ? (t.frequencyPercent / 100) * t.payoutMultiplier : 0),
+    0
+  );
+
+  const bonusTier = config.tiers.find((t) => t.key === "dollarBonus");
+  const bonusProb = (bonusTier?.frequencyPercent ?? 0) / 100;
+
+  const pool = config.specialReelTiers ?? [];
+  const poolTotal = pool.reduce((sum, t) => sum + t.frequencyPercent, 0);
+  const poolMean =
+    poolTotal > 0 ? pool.reduce((sum, t) => sum + (t.frequencyPercent / poolTotal) * (t.payoutMultiplier ?? 0), 0) : 0;
+  const drawCountTotal = TOP_DOLLAR_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + w.weight, 0);
+  const eDrawCount =
+    drawCountTotal > 0
+      ? TOP_DOLLAR_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + (w.weight / drawCountTotal) * w.count, 0)
+      : 0;
+  const eOffer = eDrawCount * poolMean;
+
+  const bonusRtp = TOP_DOLLAR_MIN_BET > 0 ? (bonusProb * eOffer) / TOP_DOLLAR_MIN_BET : 0;
+
+  return (lineEV + bonusRtp) * 100;
+}
+
+/** Gems Deluxe only — a duplicate of Top Dollar under a new name/id, same mechanics. Mirrors
+ * TOP_DOLLAR_OFFER_DRAW_COUNT_WEIGHTS above (backEnd/src/games/GemsDeluxe/config.ts's
+ * OFFER_DRAW_COUNT_WEIGHTS). */
+const GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS = [
+  { count: 1, weight: 40 },
+  { count: 2, weight: 40 },
+  { count: 3, weight: 20 },
+];
+
+/** Gems Deluxe only — mirrors TOP_DOLLAR_MIN_BET above. */
+const GEMS_DELUXE_MIN_BET = 10;
+
+/** Mirrors the backend's computeGemsDeluxeRtpPercent (backEnd/src/services/paytableConfig.ts) —
+ * identical formula to computeTopDollarRtpPercent above, since Gems Deluxe is a duplicate game. */
+function computeGemsDeluxeRtpPercent(config: PaytableConfig): number {
+  const lineEV = config.tiers.reduce(
+    (sum, t) => sum + (t.payoutMultiplier !== null ? (t.frequencyPercent / 100) * t.payoutMultiplier : 0),
+    0
+  );
+
+  const bonusTier = config.tiers.find((t) => t.key === "dollarBonus");
+  const bonusProb = (bonusTier?.frequencyPercent ?? 0) / 100;
+
+  const pool = config.specialReelTiers ?? [];
+  const poolTotal = pool.reduce((sum, t) => sum + t.frequencyPercent, 0);
+  const poolMean =
+    poolTotal > 0 ? pool.reduce((sum, t) => sum + (t.frequencyPercent / poolTotal) * (t.payoutMultiplier ?? 0), 0) : 0;
+  const drawCountTotal = GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + w.weight, 0);
+  const eDrawCount =
+    drawCountTotal > 0
+      ? GEMS_DELUXE_OFFER_DRAW_COUNT_WEIGHTS.reduce((sum, w) => sum + (w.weight / drawCountTotal) * w.count, 0)
+      : 0;
+  const eOffer = eDrawCount * poolMean;
+
+  const bonusRtp = GEMS_DELUXE_MIN_BET > 0 ? (bonusProb * eOffer) / GEMS_DELUXE_MIN_BET : 0;
+
+  return (lineEV + bonusRtp) * 100;
+}
+
 /**
  * Mirrors the backend's computeRtpPercent (backEnd/src/services/paytableConfig.ts) so the
  * admin page can show the effective RTP live, before the admin ever hits Save.
  */
 export function computeRtpPercent(config: PaytableConfig): number {
+  if (config.gameId === "top-dollar") {
+    return computeTopDollarRtpPercent(config);
+  }
+
+  if (config.gameId === "gems-deluxe") {
+    return computeGemsDeluxeRtpPercent(config);
+  }
+
   if (config.gameId === "rubber-duck") {
     return computeRubberDuckRtpPercent(config);
   }

@@ -137,6 +137,16 @@ const TIER_LABELS: Record<TierKey, string> = {
   GRAPES: "Grapes (loss fruit — weight only)",
   LEMON: "Lemon (loss fruit — weight only)",
   STRAWBERRY: "Strawberry (loss fruit — weight only)",
+  diamondOne: "1x Diamond (anywhere)",
+  diamondTwo: "2x Diamond (anywhere)",
+  diamondThree: "3x Diamond (anywhere)",
+  dollarBonus: "$ Bonus Trigger",
+  dollarPoolFive: "Bonus pool: $5",
+  dollarPoolTen: "Bonus pool: $10",
+  dollarPoolTwenty: "Bonus pool: $20",
+  dollarPoolFifty: "Bonus pool: $50",
+  dollarPoolHundred: "Bonus pool: $100",
+  dollarPoolThousand: "Bonus pool: $1000",
 };
 
 const SHAMROCK_RULE_LABELS: Record<string, string> = {
@@ -293,6 +303,48 @@ const GAME_TIER_IMAGE_OVERRIDES: Partial<Record<string, Partial<Record<TierKey, 
   "rubber-duck": {
     BOAT: "/symbols/rubberDuck/boat.png",
     BONUS: "/symbols/rubberDuck/bonus.png",
+  },
+  // Top Dollar reuses "seven"/"tripleBar"/"doubleBar"/"singleBar"/"anyBar" from Buffalo 777 /
+  // 777 Fruity / 5x Rewind's shared tier keys, but has its own distinct artwork for all of them
+  // (frontEnd/public/symbols/dollarGame/) — without this override those rows fell back to
+  // TIER_IMAGES' Buffalo 777 art (or, for "seven", no image at all). diamondOne/Two/Three and
+  // dollarBonus/dollarPool* are Top Dollar-only keys with no TIER_IMAGES entry to fall back to.
+  "top-dollar": {
+    seven: "/symbols/dollarGame/7.png",
+    tripleBar: "/symbols/dollarGame/TripleBar.png",
+    doubleBar: "/symbols/dollarGame/doubleBar.png",
+    singleBar: "/symbols/dollarGame/singleBar.png",
+    anyBar: "/symbols/dollarGame/singleBar.png",
+    diamondOne: "/symbols/dollarGame/daimond.png",
+    diamondTwo: "/symbols/dollarGame/daimond.png",
+    diamondThree: "/symbols/dollarGame/daimond.png",
+    dollarBonus: "/symbols/dollarGame/dollar.png",
+    dollarPoolFive: "/symbols/dollarGame/dollar.png",
+    dollarPoolTen: "/symbols/dollarGame/dollar.png",
+    dollarPoolTwenty: "/symbols/dollarGame/dollar.png",
+    dollarPoolFifty: "/symbols/dollarGame/dollar.png",
+    dollarPoolHundred: "/symbols/dollarGame/dollar.png",
+    dollarPoolThousand: "/symbols/dollarGame/dollar.png",
+  },
+  // Gems Deluxe is a duplicate of Top Dollar under a new name/id — same tier keys, same
+  // placeholder artwork, now served from its own symbols folder (frontEnd/public/symbols/
+  // gemsDeluxe/) until real gem art replaces it.
+  "gems-deluxe": {
+    seven: "/symbols/gemsDeluxe/7.png",
+    tripleBar: "/symbols/gemsDeluxe/TripleBar.png",
+    doubleBar: "/symbols/gemsDeluxe/doubleBar.png",
+    singleBar: "/symbols/gemsDeluxe/singleBar.png",
+    anyBar: "/symbols/gemsDeluxe/singleBar.png",
+    diamondOne: "/symbols/gemsDeluxe/daimond.png",
+    diamondTwo: "/symbols/gemsDeluxe/daimond.png",
+    diamondThree: "/symbols/gemsDeluxe/daimond.png",
+    dollarBonus: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolFive: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolTen: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolTwenty: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolFifty: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolHundred: "/symbols/gemsDeluxe/dollar.png",
+    dollarPoolThousand: "/symbols/gemsDeluxe/dollar.png",
   },
 };
 

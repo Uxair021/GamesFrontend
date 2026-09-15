@@ -1,0 +1,1331 @@
+/* Fully code-drawn theme — no image assets. Structured after the general
+   "classic keno cabinet" convention (title plaque, two stacked number grids
+   split by a bonus-line banner, a control rail built from 2-up button rows
+   plus stacked readouts) rather than Hexa Keno's hex-board/oval-button rail —
+   the two Keno games should read as genuinely different cabinets, not the
+   same skin twice. Background matches texasSlots' black/gold casino palette;
+   the cabinet's own metallic/green/red bevel textures are unchanged. */
+
+.skb-gameArea {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px;
+  background: radial-gradient(ellipse at center, #241a00 0%, #150f00 45%, #000000 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* A fixed-resolution "virtual canvas" (like a game canvas, not a responsive web
+   layout) holding the cabinet AND the right rail together as one unit, then
+   uniformly scaled up or down (see SuperKenoBallsGame.tsx's useFitScale
+   (fillViewport: true) + transform: scale()) to fit whatever screen it's on.
+   Everything inside must stay in fixed px (never vw/vh/%-of-viewport) so the
+   layout's proportions never drift between devices — only the outer scale
+   factor changes. Sized implicitly from its two fixed-width children below. */
+.skb-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.skb-cabinet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 1400px;
+}
+
+
+.skb-titlebar {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  box-sizing: border-box;
+
+  /* Main metallic body */
+  background: linear-gradient(
+    180deg,
+    #b7b7a9 0%,
+    #77776b 10%,
+    #68685d 45%,
+    #77776b 82%,
+    #bdbdb0 100%
+  );
+
+  border: 3px solid #a9aa9d;
+
+  /* Outer bevel/shadow */
+  box-shadow:
+    /* outer dark edge */
+    0 0 0 2px #3f4038,
+
+    /* top highlight */
+    inset 0 3px 0 #d7d8ca,
+
+    /* top inner shadow */
+    inset 0 6px 0 #8c8d81,
+
+    /* bottom highlight */
+    inset 0 -3px 0 #c3c4b7,
+
+    /* bottom dark bevel */
+    inset 0 -7px 0 #55564d,
+
+    /* left bevel */
+    inset 3px 0 0 #c5c6b9,
+
+    /* right bevel */
+    inset -3px 0 0 #77786e,
+
+    /* outer shadow */
+    0 3px 5px rgba(0, 0, 0, 0.65);
+
+  overflow: hidden;
+}
+
+
+/* Inner recessed panel */
+.skb-titlebar::before {
+  content: "";
+
+  position: absolute;
+  inset: 10px 12px;
+
+  background: linear-gradient(
+    180deg,
+    #77776b 0%,
+    #696960 45%,
+    #707066 100%
+  );
+
+  border: 2px solid #484941;
+
+  box-shadow:
+    /* top inner highlight */
+    inset 0 2px 0 rgba(210, 211, 199, 0.5),
+
+    /* bottom shadow */
+    inset 0 -3px 0 rgba(35, 36, 32, 0.65),
+
+    /* left highlight */
+    inset 2px 0 0 rgba(180, 181, 169, 0.35),
+
+    /* right shadow */
+    inset -2px 0 0 rgba(35, 36, 32, 0.5);
+
+  pointer-events: none;
+}
+
+
+/* Optional text */
+.skb-titlebar span {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 100%;
+
+  color: #fff;
+
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 1px;
+
+  text-shadow:
+    2px 2px 0 #000,
+    3px 3px 2px rgba(0, 0, 0, 0.7);
+}
+
+.skb-body {
+  flex: 1;
+  display: flex;
+  gap: 1px;
+  justify-content: space-around;
+}
+
+/* ---------- Board frame: two stacked grids split by the bonus banner ---------- */
+
+.skb-board-frame {
+  position: relative;
+  width: 80%;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  gap: 14px;
+  padding: 16px;
+
+  /* Metallic outer frame */
+  background: linear-gradient(
+    180deg,
+    #a8c5c4 0%,
+    #719493 18%,
+    #536f70 50%,
+    #789a99 82%,
+    #a9c4c2 100%
+  );
+
+  box-shadow:
+    inset 0 4px 0 rgba(220, 240, 238, 0.75),
+    inset 0 -5px 0 rgba(35, 55, 55, 0.85),
+    inset 4px 0 0 rgba(190, 215, 212, 0.5),
+    inset -4px 0 0 rgba(45, 65, 66, 0.7),
+    0 15px 35px rgba(0, 0, 0, 0.55);
+
+  isolation: isolate;
+}
+
+
+/* Inner dark bevel */
+.skb-board-frame::before {
+  content: "";
+
+  position: absolute;
+  inset: 7px;
+
+  background: linear-gradient(
+    180deg,
+    #364a49 0%,
+    #263b3b 45%,
+    #344b4a 100%
+  );
+
+  z-index: -1;
+
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.55),
+    inset 0 -3px 0 rgba(120, 150, 148, 0.35);
+}
+
+.skb-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+}
+
+.skb-row {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.skb-cell {
+  position: relative;
+  width: 90px;
+  height: 85px;
+  border: none;
+  outline: none;
+  box-sizing: border-box;
+
+  /* Bright green base */
+  background: linear-gradient( 180deg, #07b307 0%, #0baa0b 35%, #009900 70%, #006800 100%);
+
+  color: #ffffff;
+
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 42px;
+  font-weight: 700;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+  text-shadow: -4px 5px 0 #0002004d, 0 2px 2px rgba(80, 40, 0, 0.05);
+
+  /* Outer dark edge + 3D depth */
+  box-shadow:
+    inset 0 5px 0 #07a307, inset 6px 0 0 #0fad0f, inset -6px 0 0 #006b00, inset 0 -6px 0 #087508, 0 7px 7px rgb(11 121 4);
+
+  overflow: hidden;
+}
+
+
+/* TOP / LEFT BEVEL */
+.skb-cell::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(
+    135deg,
+    rgba(90, 255, 90, 0.8) 0%,
+    rgba(0, 255, 0, 0.15) 35%,
+    transparent 55%
+  );
+
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    92% 12%,
+    8% 12%
+  );
+
+  pointer-events: none;
+}
+
+
+/* DARK BOTTOM / SIDE BEVEL */
+.skb-cell::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    rgba(0, 70, 0, 0.65) 56%,
+    rgba(0, 40, 0, 0.85) 100%
+  );
+
+  clip-path: polygon(
+    0 100%,
+    0 78%,
+    12% 88%,
+    88% 88%,
+    100% 78%,
+    100% 100%
+  );
+
+  pointer-events: none;
+}
+
+
+/* NUMBER */
+.skb-cell span {
+  position: relative;
+  z-index: 2;
+
+  color: #fff;
+
+  text-shadow:
+    2px 2px 0 #000000,
+    3px 3px 2px rgba(0, 0, 0, 0.75);
+}
+
+
+/* HOVER */
+.skb-cell:hover {
+  filter: brightness(1.1);
+}
+
+
+/* PRESSED */
+.skb-cell:active {
+  filter: brightness(0.9);
+}
+
+
+.skb-cell:disabled {
+  cursor: default;
+}
+
+.skb-cell--idle:not(:disabled):hover {
+  transform: scale(1.08);
+}
+
+/* =========================
+   SELECTED / ACTIVE CELL
+========================= */
+
+.skb-cell--picked {
+  position: relative;
+  border: 1px solid #514000;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  /* Golden center + four bevels */
+  background:
+    /* TOP bevel */
+    linear-gradient(
+      to bottom,
+      #8d6a00 0,
+      #b78d00 8px,
+      transparent 8px
+    ),
+
+    /* LEFT bevel */
+    linear-gradient(
+      to right,
+      #ffff00 0,
+      #f5e900 8px,
+      transparent 8px
+    ),
+
+    /* RIGHT bevel */
+    linear-gradient(
+      to left,
+      #735500 0,
+      #9c7600 8px,
+      transparent 8px
+    ),
+
+    /* BOTTOM bevel */
+    linear-gradient(
+      to top,
+      #fff500 0,
+      #e8d000 8px,
+      transparent 8px
+    ),
+
+    /* CENTER FACE */
+    #d9aa00;
+
+  color: #e60000;
+
+  text-shadow: -4px 3px 0 #8b000059, 0 2px 2px rgba(80, 40, 0, 0.05);
+
+  box-shadow:
+    inset 0 0 0 1px #bd8f00,
+    1px 1px 2px rgba(0, 0, 0, 0.65);
+
+  z-index: 1;
+}
+
+
+/* =========================
+   BEVELED CORNERS
+========================= */
+
+.skb-cell.skb-cell--picked::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    /* TOP-LEFT dark diagonal */
+    linear-gradient(
+      135deg,
+      #725400 0,
+      #9b7400 10px,
+      transparent 10px
+    ),
+
+    /* TOP-RIGHT dark diagonal */
+    linear-gradient(
+      225deg,
+      #765800 0,
+      #a07800 10px,
+      transparent 10px
+    ),
+
+    /* BOTTOM-LEFT bright diagonal */
+    linear-gradient(
+      45deg,
+      #ffff00 0,
+      #f3e400 10px,
+      transparent 10px
+    ),
+
+    /* BOTTOM-RIGHT bright diagonal */
+    linear-gradient(
+      315deg,
+      #fff900 0,
+      #e8d600 10px,
+      transparent 10px
+    );
+
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+/* =========================
+   INNER FACE
+========================= */
+
+.skb-cell.skb-cell--picked::after {
+  content: "";
+  position: absolute;
+
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+
+  background: linear-gradient(
+    180deg,
+    #e2b300 0%,
+    #d9a800 50%,
+    #d5a300 100%
+  );
+
+  box-shadow:
+    inset 0 2px 3px rgba(120, 80, 0, 0.25),
+    inset 0 -2px 3px rgba(255, 220, 0, 0.3);
+
+  pointer-events: none;
+  z-index: 0;
+}
+
+.skb-cell--miss {
+  background: linear-gradient(135deg, #992f66 0%, #831342 60%, #91005e 100%);
+  color: #cbd5e1;
+  animation: skb-land 0.35s ease-out;
+  box-shadow: inset 0 5px 0 #91005e, inset 6px 0 0 #992f66, inset -6px 0 0 #831342, inset 0 -6px 0 #3b0220, 0 7px 7px #91005e;
+}
+
+.skb-cell--miss::before {
+  background: linear-gradient(
+    135deg,
+    #a75680 0%,
+    #c76b9a 35%,
+    transparent 55%
+  );
+}
+.skb-cell--miss::after {
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    #580731 56%,
+    #3b0220 100%
+  );
+}
+
+.skb-cell--hit {
+background: linear-gradient(135deg, #ff6b5e 0%, #d61f1f 55%, #8f0d0d 100%);
+  color: #ffe066;
+  box-shadow:
+    inset 0 5px 0 #ff6b5e, inset 6px 0 0 #d61f1f, inset -6px 0 0 #d61f1f, inset 0 -6px 0 #8f0d0d, 0 7px 7px #8f0d0d;
+  transform: scale(1.04);
+  animation: skb-land 0.4s ease-out;
+}
+.skb-cell--hit::before {
+  background: linear-gradient(
+    135deg,
+    #ff6b5e 0%,
+    #d61f1f 35%,
+    transparent 55%
+  );
+}
+.skb-cell--hit::after {
+  background: linear-gradient(135deg, transparent 55%, rgb(70 0 0 / 65%) 56%, rgb(40 0 0 / 85%) 100%);
+}
+
+@keyframes skb-land {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- Bonus banner: sandwiched between the two grids ---------- */
+
+.skb-bonus-banner {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #4d3b00 0%, #2e2400 100%);
+  border: 2px solid #8fa8ac;
+}
+
+.skb-bonus-banner-line1 {
+  font-size: 19px;
+  font-weight: 800;
+  color: #f5f5ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.skb-bonus-banner-line2 {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #ffb454;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.skb-bonus-banner-line2--won {
+  color: #ffe066;
+  text-shadow: 0 0 10px rgba(255, 224, 102, 0.75);
+}
+
+.skb-bonus-banner-line2 strong {
+  color: #ffe066;
+}
+
+/* The "port" each drawn ball falls into — purely a receiving container; the
+   balls themselves live in .skb-ball-flight-layer (a sibling overlay), not
+   as normal children here, since they need to travel in from the titlebar
+   first (see SkbFlightBall.tsx) rather than just appearing in place.
+   width/height are set inline (from the same SKB_BALL_* constants
+   SkbFlightBall.tsx places balls with) so the tank is sized to fit exactly
+   2-per-row x however many rows KENO_DRAWN_COUNT needs, no leftover space. */
+.skb-balls-fall {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: end;
+}
+
+/* Spans the whole cabinet (titlebar + body) so a single ball can travel
+   between them — see SkbFlightBall.tsx for the actual flight path math. */
+.skb-ball-flight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.skb-feed-ball {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 50px;
+  font-weight: 700;
+  -webkit-text-stroke: 1px #9d7f0f;
+  background: radial-gradient(circle at 32% 28%, #fefefe 0%, #d8dde8 55%, #aeb6c9 100%);
+  color: #16233d;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+}
+
+.skb-feed-ball--hit {
+  background: radial-gradient(circle at 32% 28%, #fff3b0 0%, #ffcc00 55%, #9d7f0f 100%);
+  color: #000000;
+  border-color: rgba(255, 224, 102, 0.7);
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.5),
+    0 0 12px rgba(255, 204, 0, 0.65);
+}
+
+/* ---------- Right rail ---------- */
+
+.skb-side-right {
+  position: relative;
+
+  width: 300px;
+  flex-shrink: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  padding: 12px;
+
+  /* Metallic outer frame */
+  background: linear-gradient(
+    180deg,
+    #d0d0c8 0%,
+    #9b9c95 12%,
+    #777973 45%,
+    #9b9c95 82%,
+    #c9cac3 100%
+  );
+
+  border: none;
+  border-radius: 0;
+
+  box-shadow:
+    inset 0 4px 0 rgba(230, 230, 225, 0.45),
+    inset 0 -5px 0 rgba(8, 8, 8, 0.85),
+    inset 4px 0 0 rgba(230, 230, 225, 0.45),
+    inset -4px 0 0 rgba(173, 173, 172, 0.7),
+    0 6px 12px rgba(0, 0, 0, 0.55);
+
+  isolation: isolate;
+}
+
+
+/* Dark recessed inner frame */
+.skb-side-right::before {
+  content: "";
+
+  position: absolute;
+  inset: 5px;
+
+  background: linear-gradient(
+    180deg,
+    #b8b7b7 0%,
+    #cecece 45%,
+    #cecece 100%
+  );
+
+  clip-path: polygon(
+    2% 0%,
+    98% 0%,
+    100% 2%,
+    100% 98%,
+    98% 100%,
+    2% 100%,
+    0% 98%,
+    0% 2%
+  );
+
+  box-shadow:
+    inset 0 2px 0 rgba(226, 226, 226, 0.65),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.3);
+
+  z-index: -1;
+}
+
+
+/* Keep all your buttons/content above the frame */
+.skb-side-right > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* On desktop these are just plain flex-column pass-throughs — the split
+   only matters on mobile, where .skb-rail-pinned gets pulled out to a fixed
+   bottom bar and .skb-rail-main stays in the normal scroll flow. */
+.skb-rail-main,
+.skb-rail-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skb-rail-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.skb-rail-btn {
+  position: relative;
+  width: 100%;
+  height: 75px;
+
+  padding: 0;
+  border: 1px solid #752018;
+  outline: none;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background:
+    /* top bevel */ linear-gradient(to bottom, #ff6259 0, #d51810 8px, transparent 8px), /* left bevel */ linear-gradient(to right, #ff554d 0, #d92720 7px, transparent 7px), /* right bevel */ linear-gradient(to left, #ff8a7d 0, #df3029 7px, transparent 7px), /* bottom bevel */ linear-gradient(to top, #9e1c15 0, #c52720 9px, transparent 9px), /* main red face */ #f72d2d;
+
+  color: #fff500;
+
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+
+  text-shadow:
+    2px 2px 0 #8a2100,
+    0 2px 2px rgba(0, 0, 0, 0.45);
+
+  box-shadow:
+    inset 0 0 0 1px #ff766b,
+    1px 2px 3px rgba(0, 0, 0, 0.65);
+}
+
+
+/* =========================
+   CORNER / DIAGONAL BEVELS
+========================= */
+
+.skb-rail-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    /* top-left */
+    linear-gradient(
+      135deg,
+      #ff8a7d 0,
+      #ff5148 8px,
+      transparent 8px
+    ),
+
+    /* top-right */
+    linear-gradient(
+      225deg,
+      #ffb0a0 0,
+      #ff5c50 8px,
+      transparent 8px
+    ),
+
+    /* bottom-left */
+    linear-gradient(
+      45deg,
+      #8f1b15 0,
+      #b7221c 9px,
+      transparent 9px
+    ),
+
+    /* bottom-right */
+    linear-gradient(
+      315deg,
+      #a51d17 0,
+      #ca2821 9px,
+      transparent 9px
+    );
+
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+/* =========================
+   INNER RED FACE
+========================= */
+
+.skb-rail-btn::after {
+  content: "";
+  position: absolute;
+
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 9px;
+
+  background: linear-gradient(
+    180deg,
+    #ff3737 0%,
+    #f52a2a 55%,
+    #ed2525 100%
+  );
+
+  box-shadow:
+    inset 0 2px 3px rgba(255, 120, 110, 0.4),
+    inset 0 -2px 3px rgba(150, 15, 10, 0.35);
+
+  pointer-events: none;
+  z-index: -1;
+}
+
+
+/* Keep button text above the bevel */
+.skb-rail-btn {
+  isolation: isolate;
+}
+
+
+/* If text is inside a span */
+.skb-rail-btn span {
+  position: relative;
+  z-index: 5;
+}
+
+
+/* Hover */
+.skb-rail-btn:hover {
+  filter: brightness(1.08);
+}
+
+
+/* Press */
+.skb-rail-btn:active {
+  filter: brightness(0.92);
+  transform: translateY(1px);
+}
+
+.skb-rail-btn-arrows {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.skb-rail-btn:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 0 0 1px #4a4a4a,
+    inset 0 2px 3px rgba(255, 255, 255, 0.5),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.35),
+    0 2px 0 #5a0505;
+}
+
+.skb-rail-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.skb-rail-stacklist,
+.skb-rail-info {
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(15, 12, 46, 0.9), rgba(8, 6, 26, 0.95));
+  border: 1px solid rgba(143, 168, 172, 0.35);
+  padding: 2px 10px;
+}
+
+.skb-rail-stackrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(206, 207, 207, 0.55);
+}
+
+.skb-rail-stacklabel {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #ff6b6b;
+}
+
+.skb-rail-stacklabel--bet {
+  color: #67e8f9;
+}
+
+.skb-rail-stackvalue {
+  font-size: 25px;
+  font-weight: 700;
+  color: #ffe066;
+  font-variant-numeric: tabular-nums;
+}
+
+.skb-rail-info {
+  flex: 1;
+  min-height: 405px;
+  display: flex;
+  flex-direction: column;
+}
+
+.skb-rail-hits-header {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(206, 207, 207, 0.55);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ff6b6b;
+}
+
+.skb-rail-hits-header span {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffe066;
+}
+
+.skb-rail-hits-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.skb-rail-hits-hint {
+  font-size: 10px;
+  color: #6b6f9c;
+  margin: 4px 0 0;
+}
+
+.skb-rail-hits-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffe066;
+  padding: 1px 2px;
+  font-size: 25px;
+}
+
+.skb-rail-hits-row--active {
+  background: rgba(255, 224, 102, 0.18);
+  border-radius: 4px;
+  color: #fff5cf;
+}
+
+.skb-play-button {
+  position: relative;
+  width: 100%;
+  height: 75px;
+
+  padding: 0;
+  border: 1px solid #752018;
+  outline: none;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background:
+    /* top bevel */ linear-gradient(to bottom, #ff6259 0, #d51810 8px, transparent 8px), /* left bevel */ linear-gradient(to right, #ff554d 0, #d92720 7px, transparent 7px), /* right bevel */ linear-gradient(to left, #ff8a7d 0, #df3029 7px, transparent 7px), /* bottom bevel */ linear-gradient(to top, #9e1c15 0, #c52720 9px, transparent 9px), /* main red face */ #f72d2d;
+
+  color: #fff500;
+
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+
+  text-shadow:
+    2px 2px 0 #8a2100,
+    0 2px 2px rgba(0, 0, 0, 0.45);
+
+  box-shadow:
+    inset 0 0 0 1px #ff766b,
+    1px 2px 3px rgba(0, 0, 0, 0.65);
+}
+
+
+/* =========================
+   CORNER / DIAGONAL BEVELS
+========================= */
+
+.skb-play-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    /* top-left */
+    linear-gradient(
+      135deg,
+      #ff8a7d 0,
+      #ff5148 8px,
+      transparent 8px
+    ),
+
+    /* top-right */
+    linear-gradient(
+      225deg,
+      #ffb0a0 0,
+      #ff5c50 8px,
+      transparent 8px
+    ),
+
+    /* bottom-left */
+    linear-gradient(
+      45deg,
+      #8f1b15 0,
+      #b7221c 9px,
+      transparent 9px
+    ),
+
+    /* bottom-right */
+    linear-gradient(
+      315deg,
+      #a51d17 0,
+      #ca2821 9px,
+      transparent 9px
+    );
+
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+/* =========================
+   INNER RED FACE
+========================= */
+
+.skb-play-button::after {
+  content: "";
+  position: absolute;
+
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 9px;
+
+  background: linear-gradient(
+    180deg,
+    #ff3737 0%,
+    #f52a2a 55%,
+    #ed2525 100%
+  );
+
+  box-shadow:
+    inset 0 2px 3px rgba(255, 120, 110, 0.4),
+    inset 0 -2px 3px rgba(150, 15, 10, 0.35);
+
+  pointer-events: none;
+  z-index: -1;
+}
+
+
+/* Keep button text above the bevel */
+.skb-play-button {
+  isolation: isolate;
+}
+
+
+/* If text is inside a span */
+.skb-play-button span {
+  position: relative;
+  z-index: 5;
+}
+
+
+/* Hover */
+.skb-play-button:hover {
+  filter: brightness(1.08);
+}
+
+
+/* Press */
+.skb-play-button:active {
+  filter: brightness(0.92);
+  transform: translateY(1px);
+}
+
+
+.skb-play-button:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 0 0 1px #4a4a4a,
+    inset 0 2px 3px rgba(255, 255, 255, 0.5),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.35),
+    0 2px 0 #5a0505;
+}
+
+.skb-play-button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.skb-error {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 14px;
+  font-weight: 700;
+  background: #000;
+  color: #ff8a8a;
+  padding: 8px 20px;
+  border-radius: 20px;
+}
+
+.hex-bar {
+  width: 200px;
+  height: 45px;
+  display: flex;
+  position: relative;
+  margin-bottom: -40px;
+}
+
+
+/* =========================
+   BOTH PIECES
+========================= */
+
+.hex-bar__piece {
+  position: relative;
+  width: 50%;
+  height: 100%;
+
+  background: linear-gradient(
+    180deg,
+    #76cfc0 0%,
+    #58b3a8 35%,
+    #3c817d 68%,
+    #285b59 100%
+  );
+
+  box-sizing: border-box;
+
+  overflow: hidden;
+}
+
+
+/* =========================
+   LEFT PIECE
+========================= */
+
+.hex-bar__piece--left {
+  clip-path: polygon(
+    5% 0%,
+    94% 0%,
+    100% 12%,
+    100% 88%,
+    94% 100%,
+    5% 100%,
+    0% 50%
+  );
+}
+
+
+/* =========================
+   RIGHT PIECE
+========================= */
+
+.hex-bar__piece--right {
+  margin-left: -1px;
+
+  clip-path: polygon(
+    6% 0%,
+    95% 0%,
+    100% 50%,
+    95% 100%,
+    6% 100%,
+    0% 88%,
+    0% 12%
+  );
+}
+
+
+/* =========================
+   TOP BEVEL
+========================= */
+
+.hex-bar__piece::before {
+  content: "";
+
+  position: absolute;
+
+  top: 2px;
+  left: 5px;
+  right: 5px;
+
+  height: 13px;
+
+  background: linear-gradient(
+    180deg,
+    rgba(215, 255, 248, 0.6),
+    rgba(150, 225, 215, 0.18),
+    transparent
+  );
+
+  clip-path: polygon(
+    4% 0%,
+    96% 0%,
+    100% 55%,
+    88% 100%,
+    12% 100%,
+    0% 55%
+  );
+
+  pointer-events: none;
+}
+
+
+/* =========================
+   LOWER DARK BEVEL
+========================= */
+
+.hex-bar__piece::after {
+  content: "";
+
+  position: absolute;
+
+  left: 6px;
+  right: 6px;
+  bottom: 2px;
+
+  height: 15px;
+
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(38, 87, 84, 0.25) 30%,
+    rgba(24, 58, 57, 0.75) 100%
+  );
+
+  clip-path: polygon(
+    10% 0%,
+    90% 0%,
+    100% 100%,
+    0% 100%
+  );
+
+  pointer-events: none;
+}
+
+
+/* =========================
+   CENTER BEVEL
+========================= */
+
+.hex-bar::before {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  top: 0;
+
+  width: 17px;
+  height: 45px;
+
+  transform: translateX(-50%);
+
+  background: linear-gradient(
+    90deg,
+    #255a57 0%,
+    #78d1c2 45%,
+    #3c827d 55%,
+    #204d4b 100%
+  );
+
+  clip-path: polygon(
+    50% 0%,
+    100% 50%,
+    50% 100%,
+    0% 50%
+  );
+
+  z-index: 10;
+
+  pointer-events: none;
+}
+
+
+/* =========================
+   CENTER DARK INNER EDGE
+========================= */
+
+.hex-bar::after {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  top: 5px;
+
+  width: 9px;
+  height: 35px;
+
+  transform: translateX(-50%);
+
+  background: linear-gradient(
+    90deg,
+    rgba(20, 55, 53, 0.7),
+    rgba(100, 190, 180, 0.35),
+    rgba(20, 55, 53, 0.7)
+  );
+
+  clip-path: polygon(
+    50% 0%,
+    100% 50%,
+    50% 100%,
+    0% 50%
+  );
+
+  z-index: 11;
+
+  pointer-events: none;
+}

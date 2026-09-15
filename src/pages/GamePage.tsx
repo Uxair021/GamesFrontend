@@ -45,7 +45,7 @@ export function GamePage() {
     };
   }, [slug]);
 
-  if (!game) {
+  if (!game || !game.component) {
     return <Navigate to="/" replace />;
   }
 
