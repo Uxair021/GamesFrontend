@@ -1,17 +1,33 @@
 import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from "pixi.js";
 import { BuffaloSymbol, PayoutRow } from "../api";
-import { loadSymbolTextures, loadBackgroundTexture, loadWinGifAnimations } from "./symbols";
+import { loadSymbolTextures, loadBackgroundTexture, loadWinGifAnimations, loadWinFrameAnimations } from "./symbols";
 import { Reel } from "./Reel";
 
 const REEL_COUNT = 3;
 const VISIBLE_ROWS = 3;
-const COLUMN_GAP = 25;
+const COLUMN_GAP = 40;
+/** Vertical counterpart to COLUMN_GAP — extra space (px) inserted between each pair of stacked
+ * rows within a single reel, on top of CELL_HEIGHT. 0 = rows sit flush with no gap (the default,
+ * matching how this reel always behaved before this constant existed). Raise it to spread rows
+ * apart; CELL_HEIGHT below is shrunk to make room so VISIBLE_ROWS rows-with-gaps still add up to
+ * exactly WINDOW_HEIGHT, same accounting COLUMN_GAP already does for CELL_WIDTH. Threaded into
+ * Reel.ts (see its rowGapPx param and `step` getter), which uses it for every row's vertical
+ * position/travel distance — never for a symbol's own on-screen size, which stays CELL_HEIGHT. */
+const ROW_GAP = 0;
+/** How far past its own CELL_WIDTH each reel's clip mask is widened (each side) — purely so the
+ * win-glow backdrop/border (see Reel.ts's startWinGlow, which reads this same COLUMN_GAP to size
+ * its own horizontal outset) has room to bleed into and fully cover the COLUMN_GAP strip between
+ * reels instead of being clipped off flush at CELL_WIDTH, which used to leave a visible sliver of
+ * raw background showing between adjacent reels' glow boxes during a win. Safe to widen — no
+ * reel content (cells are built exactly CELL_WIDTH wide) ever reaches this extra margin, so
+ * nothing new becomes visible except the intentionally-widened glow. */
+const MASK_GAP_COVER = COLUMN_GAP / 2 + 4;
 
 // Fractional position of the reel window within bg.png (1672x941 source art) — the three
 // white boxes under the "BUFFALO 777" title. First-pass estimate; tune by eye as needed.
-const WINDOW_LEFT_FRAC = 0.239;
-const WINDOW_RIGHT_FRAC = 0.761;
-const WINDOW_TOP_FRAC = 0.129;
+const WINDOW_LEFT_FRAC = 0.246;
+const WINDOW_RIGHT_FRAC = 0.7560;
+const WINDOW_TOP_FRAC = 0.133;
 const WINDOW_BOTTOM_FRAC = 0.87;
 
 const BG_ASPECT = 1672 / 941;
@@ -21,16 +37,35 @@ export const CANVAS_HEIGHT = Math.round(CANVAS_WIDTH / BG_ASPECT);
 
 const WINDOW_WIDTH = (WINDOW_RIGHT_FRAC - WINDOW_LEFT_FRAC) * CANVAS_WIDTH;
 const WINDOW_HEIGHT = (WINDOW_BOTTOM_FRAC - WINDOW_TOP_FRAC) * CANVAS_HEIGHT;
+/** Fills the frame's actual available width — no longer shrunk to match a shared square size
+ * across all 3 rows, since the frame's own fixed aspect ratio can't fit 3 full-width squares
+ * within WINDOW_HEIGHT too (there just isn't room). Only the MIDDLE (payline) row is forced
+ * square instead (see MIDDLE_ROW_HEIGHT) — that's the row that actually matters for this: it's
+ * the one that plays the win animation, and the one a square sprite sheet needs to land in
+ * cleanly. Top/bottom rows share whatever height is left over (see OUTER_ROW_HEIGHT). */
 export const CELL_WIDTH = (WINDOW_WIDTH - (REEL_COUNT - 1) * COLUMN_GAP) / REEL_COUNT;
-export const CELL_HEIGHT = WINDOW_HEIGHT / VISIBLE_ROWS;
+/** Square — exactly CELL_WIDTH tall, so a square sprite sheet fills it edge-to-edge on every
+ * side with plain contain-fit (see Reel.ts's buildCell/attachWinAnimation), no cropping needed. */
+export const MIDDLE_ROW_HEIGHT = CELL_WIDTH;
+/** Top/bottom rows' shared height — whatever's left of WINDOW_HEIGHT once the (square) middle
+ * row and both ROW_GAPs are subtracted, split evenly between the two of them. By construction
+ * OUTER_ROW_HEIGHT*2 + MIDDLE_ROW_HEIGHT + 2*ROW_GAP === WINDOW_HEIGHT exactly, so the reel
+ * block always fills the window's full height with no leftover margin to center. Also doubles
+ * as the size every *filler* symbol scrolls past at while spinning (see Reel.ts's `step`
+ * getter) — only the middle row gets resized to MIDDLE_ROW_HEIGHT, and only once it actually
+ * lands on the payline (see Reel.ts's keepOnly). */
+export const OUTER_ROW_HEIGHT =
+  (WINDOW_HEIGHT - MIDDLE_ROW_HEIGHT - (VISIBLE_ROWS - 1) * ROW_GAP) / (VISIBLE_ROWS - 1);
+export const CELL_HEIGHT = OUTER_ROW_HEIGHT;
 
-/** How many ms it takes one cell-height of scroll to pass at the shared spin speed — lower
- * is faster. Timing is expressed in cells (not ms) throughout this file so every reel's
+/** How many ms it takes one row-step (CELL_HEIGHT + ROW_GAP — see Reel.ts's `step` getter, the
+ * actual vertical distance between consecutive rows) of scroll to pass at the shared spin speed
+ * — lower is faster. Timing is expressed in cells (not ms) throughout this file so every reel's
  * filler count and travel distance line up exactly, with no rounding slack between them. */
 const MS_PER_CELL = 85;
 /** Constant scroll speed (px/ms) shared by every reel while spinning — this is what keeps
  * all 3 reels visually in lockstep for the whole spin, not just at the start. */
-const SCROLL_SPEED = CELL_HEIGHT / MS_PER_CELL;
+const SCROLL_SPEED = (CELL_HEIGHT + ROW_GAP) / MS_PER_CELL;
 /** How many cells reel 0 scrolls through before it starts decelerating into its landing. */
 const MIN_SPIN_CELLS = 10;
 /** Extra cells each subsequent reel scrolls through before it starts decelerating — this is
@@ -47,18 +82,18 @@ const TURBO_SPEED_MULTIPLIER = 2.5;
  * bg.png — left ladder highest-to-lowest, then right ladder highest-to-lowest. First-pass
  * estimate; tune by eye as needed. */
 const LADDER_POSITIONS: Record<PayoutRow["symbol"], { xFrac: number; yFrac: number }> = {
-  COIN: { xFrac: 0.0748, yFrac: 0.1222 },
-  MONEY_BAG: { xFrac: 0.0748, yFrac: 0.256 },
+  COIN: { xFrac: 0.0768, yFrac: 0.1230 },
+  MONEY_BAG: { xFrac: 0.0748, yFrac: 0.255 },
   TRIPLE_BAR: { xFrac: 0.0748, yFrac: 0.3990 },
-  DOUBLE_BAR: { xFrac: 0.0748, yFrac: 0.5376 },
-  SINGLE_BAR: { xFrac: 0.0748, yFrac: 0.6728 },
+  DOUBLE_BAR: { xFrac: 0.0748, yFrac: 0.5382 },
+  SINGLE_BAR: { xFrac: 0.0748, yFrac: 0.6718 },
   ANY_BAR: { xFrac: 0.0748, yFrac: 0.8115 },
   BULL: { xFrac: 0.9272, yFrac: 0.1176 },
-  ACE: { xFrac: 0.9272, yFrac: 0.2532 },
-  KING: { xFrac: 0.9272, yFrac: 0.3888 },
-  QUEEN: { xFrac: 0.9272, yFrac: 0.5346 },
-  JACK: { xFrac: 0.9272, yFrac: 0.6734 },
-  TEN: { xFrac: 0.9272, yFrac: 0.8092 },
+  ACE: { xFrac: 0.9272, yFrac: 0.2540 },
+  KING: { xFrac: 0.9272, yFrac: 0.3910 },
+  QUEEN: { xFrac: 0.9272, yFrac: 0.5330 },
+  JACK: { xFrac: 0.9272, yFrac: 0.6690 },
+  TEN: { xFrac: 0.9272, yFrac: 0.8100 },
 };
 
 const LADDER_TEXT_STYLE = new TextStyle({
@@ -87,19 +122,20 @@ export class Buffalo777Scene {
   private reels: Reel[] = [];
   private root: Container;
   private ladderTexts: Partial<Record<PayoutRow["symbol"], Text>> = {};
-  private gifTemplates: Awaited<ReturnType<typeof loadWinGifAnimations>>;
+  // Start empty and fill in once loadWinAnimationsInBackground() resolves — every Reel holds
+  // this exact object (not a copy), so later Object.assign()ing new entries into it is enough
+  // for their next win lookup to see them, with no extra plumbing needed. This is what lets
+  // create() return as soon as the reels themselves are playable, instead of blocking on
+  // ~85MB of win-celebration .gifs/frame-PNGs that are only needed once a win actually happens.
+  private gifTemplates: Awaited<ReturnType<typeof loadWinGifAnimations>> = {};
+  private frameAnimations: Awaited<ReturnType<typeof loadWinFrameAnimations>> = {};
+  private destroyed = false;
   private coinTexture: Texture;
   private coinLayer: Container;
   private coinTimeouts: number[] = [];
   private coinFrameCancels: Array<() => void> = [];
 
-  private constructor(
-    app: Application,
-    background: Sprite,
-    textures: Awaited<ReturnType<typeof loadSymbolTextures>>,
-    gifTemplates: Awaited<ReturnType<typeof loadWinGifAnimations>>
-  ) {
-    this.gifTemplates = gifTemplates;
+  private constructor(app: Application, background: Sprite, textures: Awaited<ReturnType<typeof loadSymbolTextures>>) {
     this.coinTexture = textures.COIN;
     this.root = new Container();
     app.stage.addChild(this.root);
@@ -114,12 +150,25 @@ export class Buffalo777Scene {
       reelWindow.y = windowTop;
 
       const mask = new Graphics();
-      mask.rect(0, 0, CELL_WIDTH, VISIBLE_ROWS * CELL_HEIGHT);
+      // WINDOW_HEIGHT, not VISIBLE_ROWS * CELL_HEIGHT — CELL_HEIGHT was shrunk to make room for
+      // ROW_GAP between rows (see its own definition above), so VISIBLE_ROWS * CELL_HEIGHT alone
+      // would now fall short of the full 3-rows-with-gaps span and clip the bottom row.
+      // WINDOW_HEIGHT already accounts for the gaps and is exactly that full span.
+      mask.rect(-MASK_GAP_COVER, 0, CELL_WIDTH + MASK_GAP_COVER * 2, WINDOW_HEIGHT);
       mask.fill({ color: 0xffffff });
       reelWindow.addChild(mask);
       reelWindow.mask = mask;
 
-      const reel = new Reel(textures, gifTemplates, CELL_WIDTH, CELL_HEIGHT);
+      const reel = new Reel(
+        textures,
+        this.gifTemplates,
+        this.frameAnimations,
+        CELL_WIDTH,
+        CELL_HEIGHT,
+        MIDDLE_ROW_HEIGHT,
+        COLUMN_GAP,
+        ROW_GAP
+      );
       reelWindow.addChild(reel.container);
 
       const idleTarget: [BuffaloSymbol, BuffaloSymbol, BuffaloSymbol] = ["TEN", "BULL", "SINGLE_BAR"];
@@ -145,15 +194,37 @@ export class Buffalo777Scene {
   }
 
   static async create(app: Application): Promise<Buffalo777Scene> {
-    const [background, textures, gifTemplates] = await Promise.all([
-      loadBackgroundTexture(),
-      loadSymbolTextures(),
-      loadWinGifAnimations(),
-    ]);
+    // Only the reel-critical assets (background + symbol art, a couple MB) gate readiness —
+    // the ~85MB of win-celebration .gifs/frame-PNGs load in the background afterwards (see
+    // loadWinAnimationsInBackground) since they're not needed until a win actually happens.
+    const [background, textures] = await Promise.all([loadBackgroundTexture(), loadSymbolTextures()]);
     const bgSprite = new Sprite(background);
     bgSprite.width = app.screen.width;
     bgSprite.height = app.screen.height;
-    return new Buffalo777Scene(app, bgSprite, textures, gifTemplates);
+    const scene = new Buffalo777Scene(app, bgSprite, textures);
+    scene.loadWinAnimationsInBackground();
+    return scene;
+  }
+
+  /** Fires off the win-celebration .gif/frame-PNG loads without blocking create() on them, then
+   * merges the results into the same gifTemplates/frameAnimations objects every Reel already
+   * holds a reference to — see the field comments above for why a plain Object.assign is enough.
+   * If the scene was torn down before this resolves, destroys the now-orphaned assets instead
+   * of merging them in. */
+  private loadWinAnimationsInBackground(): void {
+    Promise.all([loadWinGifAnimations(), loadWinFrameAnimations()])
+      .then(([gifTemplates, frameAnimations]) => {
+        if (this.destroyed) {
+          Object.values(gifTemplates).forEach((template) => template?.destroy());
+          Object.values(frameAnimations).forEach((frames) => frames?.forEach((t) => t.destroy(true)));
+          return;
+        }
+        Object.assign(this.gifTemplates, gifTemplates);
+        Object.assign(this.frameAnimations, frameAnimations);
+      })
+      // Both loaders already catch per-symbol so a single bad asset can't reach here — this is
+      // just a last-resort net so a genuinely unexpected failure logs instead of vanishing.
+      .catch((err) => console.error("Buffalo777: win-celebration animations failed to load", err));
   }
 
   /** Fills in each ladder sign with the dollar amount that payout is actually worth at the
@@ -249,10 +320,12 @@ export class Buffalo777Scene {
   }
 
   destroy(): void {
+    this.destroyed = true;
     this.coinTimeouts.forEach((id) => window.clearTimeout(id));
     this.coinFrameCancels.forEach((cancel) => cancel());
     this.reels.forEach((r) => r.destroy());
     Object.values(this.gifTemplates).forEach((template) => template?.destroy());
+    Object.values(this.frameAnimations).forEach((frames) => frames?.forEach((t) => t.destroy(true)));
     this.root.destroy({ children: true });
   }
 }

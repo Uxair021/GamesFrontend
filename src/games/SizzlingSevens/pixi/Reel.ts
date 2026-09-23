@@ -1,6 +1,7 @@
-import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import { AnimatedSprite, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { AnimatedGIF } from "@pixi/gif";
 import { SizzlingSymbol } from "../api";
+import { getWinFrameAnimationSpeed } from "./symbols";
 
 const ROW_COUNT = 3;
 const SYMBOL_PADDING = 2;
@@ -9,7 +10,7 @@ const SYMBOL_PADDING = 2;
  * cylindrical-wheel look) — this game is a flat 3x3 grid, and Scene.ts's win-highlight boxes
  * assume plain `rowIndex * cellHeight` spacing with no gap, so any nonzero value here would
  * make the rendered symbols drift out of alignment with their own highlight boxes and frame. */
-const ROW_GAP_PX = 8;
+const ROW_GAP_PX = 0;
 /** Constant-speed scroll rate during the unbounded idle spin, px/ms. */
 const IDLE_SPEED = 3.35;
 /** How many strip steps ahead of the current scroll position get pre-populated with filler,
@@ -18,7 +19,19 @@ const IDLE_SPEED = 3.35;
 const BUFFER_STEPS = 20;
 /** Symbols render slightly larger than a strict "fit inside the cell" scale would give — the
  * clipping mask (see the Reel doc comment below) makes a bit of intentional overflow safe. */
-const SYMBOL_SCALE_BOOST = 1.22;
+const SYMBOL_SCALE_BOOST = 1.7;
+/** Extra vertical room (px, split evenly above/below) a win animation's display area gets beyond
+ * the single payline cell's own height — without this, buildWinVisual's SYMBOL_SCALE_BOOST
+ * overflow (deliberately larger than the cell) gets hard-cropped flat at the cell's top/bottom
+ * edge by its own mask, which reads as an obvious cut on rounder art (e.g. WILD_2X's circular
+ * badge) even though it's barely noticeable on rectangular BAR-text art. The win overlay behind
+ * it already dims the whole reel area, so bleeding into the row above/below reads as "this
+ * symbol is celebrating bigger," not as a layout bug — same technique as Buffalo777's Reel.ts. */
+const WIN_ANIMATION_EXTRA_HEIGHT = 40;
+/** Breathing room (px, all 4 sides) between a win animation's own edges and its (now taller than
+ * the cell) display area's bounds — keeps it from reading edge-to-edge even with the boosted
+ * scale. */
+const WIN_ANIMATION_PADDING = 4;
 const PULSE_PERIOD_MS = 520;
 /** How many whole rows Stop advances past wherever the reel was when clicked, before settling
  * — e.g. with 2, whatever symbol was on the top row ends up on the bottom row. This is what
@@ -69,6 +82,7 @@ export class Reel {
   private readonly strip: Container;
   private textures: Record<SizzlingSymbol, Texture>;
   private gifTemplates: Partial<Record<SizzlingSymbol, AnimatedGIF>>;
+  private frameAnimations: Partial<Record<SizzlingSymbol, Texture[]>>;
   private symbolPool: SizzlingSymbol[];
   private weights: number[];
   private phaseOffsetSteps: number;
@@ -85,6 +99,7 @@ export class Reel {
   constructor(
     textures: Record<SizzlingSymbol, Texture>,
     gifTemplates: Partial<Record<SizzlingSymbol, AnimatedGIF>>,
+    frameAnimations: Partial<Record<SizzlingSymbol, Texture[]>>,
     private cellWidth: number,
     private cellHeight: number,
     /** Reel-strip weights (admin-configured, see GET /config's symbolWeights) — the client
@@ -101,6 +116,7 @@ export class Reel {
   ) {
     this.textures = textures;
     this.gifTemplates = gifTemplates;
+    this.frameAnimations = frameAnimations;
     this.symbolPool = Object.keys(textures) as SizzlingSymbol[];
     this.weights = this.symbolPool.map((s) => symbolWeights[s] ?? 1);
     this.phaseOffsetSteps = phaseOffsetSteps;
@@ -170,7 +186,7 @@ export class Reel {
     const maxW = this.cellWidth - SYMBOL_PADDING * 2;
     const maxH = this.cellHeight - SYMBOL_PADDING * 2;
     const scale = Math.min(maxW / sprite.texture.width, maxH / sprite.texture.height) * SYMBOL_SCALE_BOOST;
-    sprite.scale.set(scale);
+    sprite.scale.set(scale / 1.5);
     (sprite as Sprite & { baseScale: number }).baseScale = scale;
     sprite.x = this.cellWidth / 2;
     sprite.y = this.cellHeight / 2;
@@ -372,9 +388,10 @@ export class Reel {
     if (sprite) sprite.visible = visible;
   }
 
-  /** Builds a detached, self-contained visual (row `row`'s matching-symbol .gif if one exists,
-   * else a pulsing clone — BONUS has no .gif yet) for Scene.ts to position above its own
-   * shared win overlay. Doesn't touch this reel's own display tree at all — pair this with
+  /** Builds a detached, self-contained visual for row `row`'s matching symbol — a fresh
+   * AnimatedSprite for RED_7 (see frameAnimations/WIN_FRAME_SETS), else its .gif clone if one
+   * exists, else a pulsing static clone (BONUS has neither) — for Scene.ts to position above its
+   * own shared win overlay. Doesn't touch this reel's own display tree at all — pair this with
    * setRowSpriteVisible(row, false) to actually hide the original underneath it. Returns null
    * if `row` isn't currently showing anything (shouldn't happen once settled, but is possible
    * mid-spin). */
@@ -383,38 +400,54 @@ export class Reel {
     if (!cell) return null;
     const symbol = cell.label as SizzlingSymbol;
 
-    const container = new Container();
+    const frames = this.frameAnimations[symbol];
     const template = this.gifTemplates[symbol];
-    if (template) {
-      const gif = template.clone();
-      gif.loop = true;
-      gif.anchor.set(0.5);
-      const maxW = this.cellWidth - SYMBOL_PADDING * 2;
-      const maxH = this.cellHeight - SYMBOL_PADDING * 2;
-      gif.scale.set(Math.min(maxW / gif.texture.width, maxH / gif.texture.height) * SYMBOL_SCALE_BOOST);
-      gif.x = this.cellWidth / 2;
-      gif.y = this.cellHeight / 2;
+    // Fresh player around already-decoded assets either way (cheap) — never re-fetch/re-parse
+    // the raw frame files or .gif on every win.
+    const winAnim: AnimatedGIF | AnimatedSprite | undefined = frames
+      ? Object.assign(new AnimatedSprite(frames), { loop: true, animationSpeed: getWinFrameAnimationSpeed(symbol) })
+      : template
+        ? Object.assign(template.clone(), { loop: true })
+        : undefined;
+
+    if (winAnim) {
+      const container = new Container();
+      winAnim.anchor.set(0.5);
+      // Taller-than-the-cell display area (see WIN_ANIMATION_EXTRA_HEIGHT doc comment) so the
+      // SYMBOL_SCALE_BOOST overflow below has somewhere to go instead of getting cropped flat
+      // at the cell's own top/bottom edge.
+      const maxW = this.cellWidth - WIN_ANIMATION_PADDING * 2;
+      const maxH = this.cellHeight + WIN_ANIMATION_EXTRA_HEIGHT - WIN_ANIMATION_PADDING * 2;
+      winAnim.scale.set(Math.min(maxW / winAnim.texture.width, maxH / winAnim.texture.height) * SYMBOL_SCALE_BOOST / 1.8);
+      winAnim.x = this.cellWidth / 2;
+      winAnim.y = this.cellHeight / 2;
 
       const mask = new Graphics();
-      mask.rect(0, 0, this.cellWidth, this.cellHeight);
+      mask.rect(
+        WIN_ANIMATION_PADDING,
+        -WIN_ANIMATION_EXTRA_HEIGHT / 2 + WIN_ANIMATION_PADDING,
+        this.cellWidth - WIN_ANIMATION_PADDING * 2,
+        this.cellHeight + WIN_ANIMATION_EXTRA_HEIGHT - WIN_ANIMATION_PADDING * 2
+      );
       mask.fill({ color: 0xffffff });
       container.addChild(mask);
-      gif.mask = mask;
-      container.addChild(gif);
+      winAnim.mask = mask;
+      container.addChild(winAnim);
 
       return {
         view: container,
-        play: () => gif.play(),
+        play: () => winAnim.play(),
         destroy: () => {
-          gif.mask = null;
-          gif.destroy();
+          winAnim.mask = null;
+          winAnim.destroy();
           mask.destroy();
           container.destroy();
         },
       };
     }
 
-    // No .gif for this symbol (BONUS) — a fresh pulsing sprite clone instead.
+    // Neither a frame set nor a .gif for this symbol (BONUS) — a fresh pulsing sprite clone instead.
+    const container = new Container();
     const sprite = new Sprite(this.textures[symbol]);
     sprite.anchor.set(0.5);
     const maxW = this.cellWidth - SYMBOL_PADDING * 2;

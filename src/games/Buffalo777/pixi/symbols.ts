@@ -22,13 +22,19 @@ const SYMBOL_FILES: Record<BuffaloSymbol, string> = {
  * cell when that symbol lands as part of a win. Add more here as more .gifs are provided. */
 const WIN_GIF_FILES: Partial<Record<BuffaloSymbol, string>> = {
   QUEEN: "Q.gif",
-  TEN: "10.gif",
-  JACK: "J.gif",
-  KING: "K.gif",
   SINGLE_BAR: "SingleBar.gif",
   DOUBLE_BAR: "DoubleBar.gif",
   TRIPLE_BAR: "TripleBar.gif",
   COIN: "coin.gif",
+};
+
+/** Symbols whose bonus win animation is a numbered sequence of PNG frames (1.png, 2.png, ...)
+ * in its own folder, played as a PIXI.AnimatedSprite instead of a decoded .gif — add more here
+ * as more frame sets are provided. Takes priority over WIN_GIF_FILES for the same symbol. */
+const WIN_FRAME_SETS: Partial<Record<BuffaloSymbol, { dir: string; frameCount: number }>> = {
+  TEN: { dir: "10 symbole sprite", frameCount: 22 },
+  JACK: { dir: "J symbole sprite", frameCount: 20 },
+  KING: { dir: "K symbole sprite", frameCount: 23 },
 };
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -82,11 +88,52 @@ export async function loadBackgroundTexture(): Promise<Texture> {
 export async function loadWinGifAnimations(): Promise<Partial<Record<BuffaloSymbol, AnimatedGIF>>> {
   const entries = await Promise.all(
     (Object.entries(WIN_GIF_FILES) as [BuffaloSymbol, string][]).map(async ([symbol, file]) => {
-      const res = await fetch(`${ASSET_BASE}/${file}`);
-      const buffer = await res.arrayBuffer();
-      const template = AnimatedGIF.fromBuffer(buffer, { loop: true, autoPlay: false });
-      return [symbol, template] as const;
+      // Caught per-symbol so one missing/corrupt .gif can't take every other symbol's
+      // animation down with it — this whole call sits inside a single Promise.all alongside
+      // loadWinFrameAnimations (see Buffalo777Scene's loadWinAnimationsInBackground), and an
+      // uncaught rejection here would fail that entire batch, silently.
+      try {
+        const res = await fetch(`${ASSET_BASE}/${file}`);
+        const buffer = await res.arrayBuffer();
+        const template = AnimatedGIF.fromBuffer(buffer, { loop: true, autoPlay: false });
+        return [symbol, template] as const;
+      } catch (err) {
+        console.error(`Buffalo777: failed to load win .gif for ${symbol} (${file})`, err);
+        return [symbol, undefined] as const;
+      }
     })
   );
-  return Object.fromEntries(entries) as Partial<Record<BuffaloSymbol, AnimatedGIF>>;
+  return Object.fromEntries(entries.filter(([, template]) => template)) as Partial<Record<BuffaloSymbol, AnimatedGIF>>;
+}
+
+async function loadFrameSet({ dir, frameCount }: { dir: string; frameCount: number }): Promise<Texture[]> {
+  return Promise.all(
+    Array.from({ length: frameCount }, async (_, i) => {
+      const img = await loadImage(`${ASSET_BASE}/${dir}/${i + 1}.png`);
+      return Texture.from(img);
+    })
+  );
+}
+
+/** Decoded frame `Texture[]` per symbol in WIN_FRAME_SETS — same one-time-cost reasoning as
+ * loadWinGifAnimations above: every frame is loaded exactly once here, then Reel.ts builds a
+ * fresh `AnimatedSprite` from the shared array on every win (cheap — the textures are already
+ * decoded, an AnimatedSprite is just a thin player around them). */
+export async function loadWinFrameAnimations(): Promise<Partial<Record<BuffaloSymbol, Texture[]>>> {
+  const entries = await Promise.all(
+    (Object.entries(WIN_FRAME_SETS) as [BuffaloSymbol, { dir: string; frameCount: number }][]).map(
+      async ([symbol, spec]) => {
+        // Same per-symbol isolation as loadWinGifAnimations above — a single bad/missing frame
+        // (e.g. frameCount drifting out of sync with what's actually in the folder) only drops
+        // that one symbol's animation instead of rejecting every symbol's.
+        try {
+          return [symbol, await loadFrameSet(spec)] as const;
+        } catch (err) {
+          console.error(`Buffalo777: failed to load win frame animation for ${symbol} (${spec.dir})`, err);
+          return [symbol, undefined] as const;
+        }
+      }
+    )
+  );
+  return Object.fromEntries(entries.filter(([, frames]) => frames)) as Partial<Record<BuffaloSymbol, Texture[]>>;
 }

@@ -7,9 +7,6 @@ import {
   TierRow,
   CelebrationTier,
   computeRtpPercent,
-  computeSizzlingSevensStats,
-  solveSizzlingSevensLossPercent,
-  solveSizzlingSevensRtpPercent,
   computeVegasHitsStats,
   solveVegasHitsLossPercent,
   solveVegasHitsRtpPercent,
@@ -368,14 +365,13 @@ const SHAMROCK_RULE_IMAGES: Record<string, string> = {
 
 const WIN_TIER_KEYS: TierKey[] = ["simpleWin", "bigWin", "megaWin", "jackpot"];
 
-/** Sizzling 7s and Vegas Hits only — both express every payoutMultiplier relative to a fixed
- * internal LINE_COST reference (see their own backend config.ts), not as a direct bet
- * multiplier the way every other game's payoutMultiplier is. The "Payout (x bet)" column below
- * edits that raw internal number as-is (it's what's actually stored), but shows the real
- * x-bet conversion (payoutMultiplier / LINE_COST) alongside it so it doesn't read as a
- * multiplier ~30x too large. */
+/** Vegas Hits only — expresses every payoutMultiplier relative to a fixed internal LINE_COST
+ * reference (see its own backend config.ts), not as a direct bet multiplier the way every
+ * other game's payoutMultiplier is. The "Payout (x bet)" column below edits that raw internal
+ * number as-is (it's what's actually stored), but shows the real x-bet conversion
+ * (payoutMultiplier / LINE_COST) alongside it so it doesn't read as a multiplier ~30x too
+ * large. */
 const LINE_COST_BY_GAME: Partial<Record<string, number>> = {
-  "sizzling-7s": 30,
   "vegas-hits": 30,
 };
 
@@ -385,8 +381,16 @@ function inputClass(invalid = false): string {
   }`;
 }
 
+// Buffalo777 and Sizzling 7s both run fully client-side now (no backend paytable document to
+// fetch/save — see their own dedicated AdminBuffaloRtpPage/AdminSizzlingRtpPage, which read and
+// write localStorage instead), so this page — which only knows how to talk to the backend
+// paytable service — would 404/500 on either one. Excluded here rather than left to be
+// discovered by a broken tab click.
+const OFFLINE_GAME_SLUGS = new Set(["buffalo-777", "sizzling-7s"]);
+const RTP_CONTROLLED_GAMES = gameRegistry.filter((g) => !OFFLINE_GAME_SLUGS.has(g.slug));
+
 export function AdminRtpPage() {
-  const [gameId, setGameId] = useState(gameRegistry[0]?.slug ?? "");
+  const [gameId, setGameId] = useState(RTP_CONTROLLED_GAMES[0]?.slug ?? "");
   const [config, setConfig] = useState<PaytableConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
@@ -425,17 +429,11 @@ export function AdminRtpPage() {
   }, [gameId]);
 
   const hasFreeSpin = config?.tiers.some((t) => t.key === "freeSpin") ?? false;
-  // Sizzling 7s and Vegas Hits both have no dedicated "loss" tier (every row is a real,
-  // always-drawn reel symbol — see their own config.ts comments), so their RTP and loss% both
-  // come from the same (expensive, 200k-sim) Monte Carlo pass — compute it once here and reuse,
-  // rather than calling computeRtpPercent (which would re-run the whole simulation a second
-  // time) separately below.
-  const simStats =
-    config && gameId === "sizzling-7s"
-      ? computeSizzlingSevensStats(config)
-      : config && gameId === "vegas-hits"
-        ? computeVegasHitsStats(config)
-        : null;
+  // Vegas Hits has no dedicated "loss" tier (every row is a real, always-drawn reel symbol —
+  // see its own config.ts comment), so its RTP and loss% both come from the same (expensive,
+  // 200k-sim) Monte Carlo pass — compute it once here and reuse, rather than calling
+  // computeRtpPercent (which would re-run the whole simulation a second time) separately below.
+  const simStats = config && gameId === "vegas-hits" ? computeVegasHitsStats(config) : null;
   const computedRtp = simStats ? simStats.rtpPercent : config ? computeRtpPercent(config) : 0;
   const frequencySum = config ? config.tiers.reduce((sum, t) => sum + t.frequencyPercent, 0) : 0;
   const frequencyValid = Math.abs(frequencySum - 100) <= 0.01;
@@ -454,7 +452,7 @@ export function AdminRtpPage() {
   // Plain, direct field edit — frequency and payout ("x bet") values are the admin's own fixed
   // truth and are never auto-touched by anything else on this page. Target RTP %/Target Loss %
   // are the only fields that trigger an automatic solve (see setTargetRtp/setTargetLoss below),
-  // and for Sizzling 7s that solve only ever reshapes the *weights*, never the payouts.
+  // and for Vegas Hits that solve only ever reshapes the *weights*, never the payouts.
   function updateTier(key: TierKey, patch: Partial<TierRow>) {
     if (!config) return;
     setSavedOk(false);
@@ -548,26 +546,12 @@ export function AdminRtpPage() {
     if (!config) return;
     setSavedOk(false);
 
-    // Sizzling 7s has no dedicated "loss" tier for rescaleLineTiers' proportional-frequency
+    // Vegas Hits has no dedicated "loss" tier for rescaleLineTiers' proportional-frequency
     // rescale to absorb slack into (all 7 rows are real, always-drawn symbols — scaling them all
     // by the same factor is a no-op for RTP and breaks the sum-to-100% invariant) — reshape the
     // weight *distribution* instead, via the same gamma search Target Loss % uses, and never
-    // touch payout multipliers (those are the admin's own fixed numbers — see
-    // solveSizzlingSevensRtpPercent's doc comment). Runs a couple dozen Monte Carlo passes, so
-    // defer it a tick behind a "Solving..." state instead of freezing.
-    if (gameId === "sizzling-7s") {
-      setSolving(true);
-      window.setTimeout(() => {
-        const tiers = solveSizzlingSevensRtpPercent(config, newTarget);
-        setConfig({ ...config, targetRtpPercent: newTarget, tiers });
-        setSolving(false);
-      }, 0);
-      return;
-    }
-
-    // Vegas Hits has the same "no dedicated loss tier" structure as Sizzling 7s (every one of
-    // its 7 rows is a real, always-drawn reel symbol) — reshape the weight distribution via the
-    // same gamma search instead of the generic proportional rescale below.
+    // touch payout multipliers (those are the admin's own fixed numbers). Runs a couple dozen
+    // Monte Carlo passes, so defer it a tick behind a "Solving..." state instead of freezing.
     if (gameId === "vegas-hits") {
       setSolving(true);
       window.setTimeout(() => {
@@ -600,15 +584,14 @@ export function AdminRtpPage() {
     setConfig({ ...config, targetRtpPercent: newTarget, tiers });
   }
 
-  // Sizzling 7s only — see solveSizzlingSevensLossPercent's doc comment for the mechanism
-  // (reshapes symbol weights, leaves payouts untouched) and its structural ceiling caveat.
+  // Vegas Hits only — see solveVegasHitsLossPercent's doc comment for the mechanism (reshapes
+  // symbol weights, leaves payouts untouched) and its structural ceiling caveat.
   function setTargetLoss(newTarget: number) {
     if (!config) return;
     setSavedOk(false);
     setSolving(true);
     window.setTimeout(() => {
-      const tiers =
-        gameId === "vegas-hits" ? solveVegasHitsLossPercent(config, newTarget) : solveSizzlingSevensLossPercent(config, newTarget);
+      const tiers = solveVegasHitsLossPercent(config, newTarget);
       setConfig({ ...config, targetLossPercent: newTarget, tiers });
       setSolving(false);
     }, 0);
@@ -640,7 +623,7 @@ export function AdminRtpPage() {
       />
 
       <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-white p-1 max-w-7xl">
-        {gameRegistry.map((g) => (
+        {RTP_CONTROLLED_GAMES.map((g) => (
           <button
             key={g.slug}
             onClick={() => setGameId(g.slug)}
@@ -791,9 +774,9 @@ export function AdminRtpPage() {
               </p>
               {!lossValid && (
                 <p className="mt-2 text-xs text-rose-600">
-                  {gameId === "vegas-hits"
-                    ? "Vegas Hits' overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."
-                    : "Sizzling 7s' 27 fully-overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the current payout table — a target beyond that lands as close as the weights can get, not exactly on it."}
+                  Vegas Hits' overlapping paylines put a hard ceiling on how loss-heavy this game can ever be for the
+                  current payout table — a target beyond that lands as close as the weights can get, not exactly on
+                  it.
                 </p>
               )}
             </div>

@@ -9,6 +9,7 @@ const NAV = [
   { to: "/admin/force-outcome", label: "Force Outcome", icon: Zap },
   { to: "/admin/rtp", label: "RTP Control", icon: Sliders },
   { to: "/admin/buffalo-rtp", label: "Buffalo RTP", icon: Gauge },
+  { to: "/admin/sizzling-rtp", label: "Sizzling RTP", icon: Gauge },
   { to: "/admin/live-feed", label: "Live Feed", icon: Radio },
 ];
 

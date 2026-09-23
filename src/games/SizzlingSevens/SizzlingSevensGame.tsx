@@ -3,13 +3,13 @@ import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
 import { SizzlingSevensScene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/SizzlingSevensScene";
-import { getSizzlingSevensConfig, spinRequest, SizzlingSevensConfigResponse, FreeGamesAward } from "./api";
+import { getSizzlingSevensConfig, spinRequest, logSpinResult, SizzlingSevensConfigResponse, FreeGamesAward } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { useFitScale } from "../shared/useFitScale";
 import * as sound from "../shared/sound/soundEngine";
 
-const BG_URL = "/symbols/sizzling7s/bg.png";
+const BG_URL = "/symbols/sizzling7s/bg.webp";
 const BG_MUSIC_URL = "/Sound/alex-morgan-chinese-lunar-new-year-music-548625.mp3";
 /** How long an auto-played free spin stays continuously "spinning" before it lands on its own
  * — a normal spin instead lands whenever the player clicks Stop. */
@@ -196,7 +196,7 @@ export function SizzlingSevensGame() {
     sound.playDrumBeat();
 
     try {
-      const result = await spinRequest(betLevel, grid, false, null);
+      const result = await spinRequest(betLevel, grid, false, null, user?.balance ?? 0);
       applyResult(
         {
           winAmount: result.winAmount,
@@ -207,13 +207,23 @@ export function SizzlingSevensGame() {
         },
         false
       );
+
+      // Fire-and-forget — purely for the admin dashboard's record-keeping, gameplay never
+      // waits on or depends on this succeeding.
+      logSpinResult({
+        betAmount: betLevel,
+        winAmount: result.winAmount,
+        reelSymbols: result.grid,
+        balanceAfter: result.balance,
+        tier: result.tier,
+      }).catch(() => {});
     } catch (err) {
       const message = err instanceof Error ? err.message : "Spin failed";
       setError(message);
     } finally {
       setSpinning(false);
     }
-  }, [applyResult, awaitingStop, betLevel]);
+  }, [applyResult, awaitingStop, betLevel, user]);
 
   /** One auto-played free spin — starts scrolling, freezes itself after
    * FREE_SPIN_AUTO_STOP_MS (no player Stop click during Free Games), then sends the frozen
@@ -229,7 +239,8 @@ export function SizzlingSevensGame() {
       const grid = await sceneRef.current.freezeSpin();
       sound.playDrumBeat();
 
-      const result = await spinRequest(betLevels[freeGames.lockedBetIndex], grid, true, freeGames.pool);
+      const freeBetLevel = betLevels[freeGames.lockedBetIndex];
+      const result = await spinRequest(freeBetLevel, grid, true, freeGames.pool, user?.balance ?? 0);
       applyResult(
         {
           winAmount: result.winAmount,
@@ -240,13 +251,24 @@ export function SizzlingSevensGame() {
         },
         true
       );
+
+      // Fire-and-forget — purely for the admin dashboard's record-keeping, gameplay never
+      // waits on or depends on this succeeding. Bet is logged as 0 since free spins never
+      // stake anything (matches the balance math above).
+      logSpinResult({
+        betAmount: 0,
+        winAmount: result.winAmount,
+        reelSymbols: result.grid,
+        balanceAfter: result.balance,
+        tier: result.tier,
+      }).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Free spin failed");
       setFreeGames(null);
     } finally {
       setSpinning(false);
     }
-  }, [applyResult, betLevels, freeGames]);
+  }, [applyResult, betLevels, freeGames, user]);
 
   // Auto-continue the Free Games round until it runs out, same "auto-continue while a bonus
   // round is active" pattern Crazy777 uses for respins.
@@ -446,13 +468,13 @@ function toBetMultiple(payout: number, lineCost: number): string {
 }
 
 const SYMBOL_IMAGES: Record<string, string> = {
-  RED_7: "/symbols/sizzling7s/red-7.png",
-  BLUE_7: "/symbols/sizzling7s/blue-7.png",
-  BAR: "/symbols/sizzling7s/bar.png",
-  DOUBLE_BAR: "/symbols/sizzling7s/bar2.png",
-  TRIPLE_BAR: "/symbols/sizzling7s/bar3.png",
-  WILD_2X: "/symbols/sizzling7s/2xWild.png",
-  BONUS: "/symbols/sizzling7s/bonus.png",
+  RED_7: "/symbols/sizzling7s/red-7.webp",
+  BLUE_7: "/symbols/sizzling7s/blue-7.webp",
+  BAR: "/symbols/sizzling7s/bar.webp",
+  DOUBLE_BAR: "/symbols/sizzling7s/bar2.webp",
+  TRIPLE_BAR: "/symbols/sizzling7s/bar3.webp",
+  WILD_2X: "/symbols/sizzling7s/2xWild.webp",
+  BONUS: "/symbols/sizzling7s/bonus.webp",
 };
 
 function PaytableModal({ config, onClose }: { config: SizzlingSevensConfigResponse; onClose: () => void }) {

@@ -13,6 +13,17 @@ const DEFAULT_BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 20, 25, 30];
 const WIN_GLOW_MIN_DISPLAY_MS = 2000;
 const BG_MUSIC_URL = "/Sound/atlasaudio-game-game-music-576637.mp3";
 
+const BUTTON_IMAGES = {
+  home: "/symbols/buffalo777/Home Button Buffalo777.webp",
+  minus: "/symbols/buffalo777/Minus Button Buffalo777.webp",
+  plus: "/symbols/buffalo777/Plus Button Buffalo777.webp",
+  setting: "/symbols/buffalo777/Setting Button Buffalo777.webp",
+  spinGreen: "/symbols/buffalo777/Spin Button Green Buffalo777.webp",
+  spinRed: "/symbols/buffalo777/Spin Button Red Buffalo777.webp",
+  auto: "/symbols/buffalo777/Auto Button Buffalo777.webp",
+  turbo: "/symbols/buffalo777/Turbo Button Buffalo777.webp",
+} as const;
+
 /** Maps the backend's winTierKey (SpinResponse.winTierKey) to the ladder sign it should pour
  * coins out of — see Buffalo777Scene's LADDER_POSITIONS. Keys mirror engine.ts's TierKey. */
 const TIER_KEY_TO_LADDER_SYMBOL: Record<string, PayoutRow["symbol"]> = {
@@ -223,17 +234,22 @@ export function Buffalo777Game() {
       className="relative flex flex-col overflow-hidden rounded-2xl bg-black shadow-2xl"
       style={{
         width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
         transform: fitScale !== 1 ? `scale(${fitScale})` : undefined,
         transformOrigin: "top left",
       }}
     >
-      <div className="absolute top-0 z-10 w-full flex items-center justify-start px-3 py-2">
+      {/* Home sits on the pre-drawn badge baked into bg.webp's own art, top-left corner. */}
+      <div
+        className="absolute z-10"
+        style={{ left: 52, top: 52, width: 70, height: 70, transform: "translate(-50%, -50%)" }}
+      >
         <Link
           to="/"
-          className="flex bg-white h-10 w-10 items-center justify-center rounded-full border-2 border-black text-black font-bold hover:bg-white"
           aria-label="Home"
+          className="block h-[40px] w-[40px] transition-transform duration-100 ease-out active:scale-90"
         >
-          <HomeIcon size={26} />
+          <img src={BUTTON_IMAGES.home} alt="Home" className="h-full w-full select-none object-contain" draggable={false} />
         </Link>
       </div>
 
@@ -252,87 +268,147 @@ export function Buffalo777Game() {
         </div>
       )}
 
-      <div className="absolute bottom-0 flex w-full items-center justify-between gap-3 border-t border-white/10 bg-gradient-to-b from-neutral-800 via-neutral-900 to-black px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-1.5">
-            <CtrlButton onClick={() => setShowPaytable((v) => !v)} ariaLabel="Paytable" className="h-10 w-10">
-              <InfoIcon />
-            </CtrlButton>
-            <CtrlButton
-              onClick={() => {
-                sound.resumeAudio();
-                setMuted(sound.toggleMuted());
-              }}
-              active={muted}
-              ariaLabel={muted ? "Unmute" : "Mute"}
-              className="h-10 w-10"
-            >
-              <SoundIcon muted={muted} />
-            </CtrlButton>
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-md font-bold uppercase tracking-wide text-white/80">Credit</span>
-            <span className="text-3xl font-bold text-white">{(user?.balance ?? 0).toFixed(2)}</span>
-          </div>
-        </div>
+      {/*
+       * Every control below sits exactly on the slot pre-drawn into bg.webp's own control-bar
+       * art (gear/minus/plus/win-panel/turbo/auto/spin) — absolute, in canvas pixels
+       * (CANVAS_WIDTH x CANVAS_HEIGHT = 1672x941), centered on each element via
+       * translate(-50%, -50%). First-pass estimate read off the art; tune by eye as needed,
+       * same convention as Buffalo777Scene.ts's own LADDER_POSITIONS. Mute has no slot in this
+       * art (not part of the original design) so it lives in the top-right corner instead,
+       * clear of everything else.
+       */}
+      <div className="absolute z-10" style={{ right: 16, top: 16 }}>
+        <CtrlButton
+          onClick={() => {
+            sound.resumeAudio();
+            setMuted(sound.toggleMuted());
+          }}
+          active={muted}
+          ariaLabel={muted ? "Unmute" : "Mute"}
+          className="h-10 w-10"
+        >
+          <SoundIcon muted={muted} />
+        </CtrlButton>
+      </div>
 
-        <div className="flex items-center gap-2">
-          <CtrlButton onClick={() => changeBet(-1)} disabled={betIndex === 0} ariaLabel="Decrease bet" className="h-10 w-10">
-            <TriangleIcon direction="left" />
-          </CtrlButton>
-          <div className="flex flex-col items-center leading-tight">
-            <span className="text-md font-bold uppercase tracking-wide text-amber-400">Bet</span>
-            <span className="text-3xl font-bold text-white">{betAmount.toFixed(2)}</span>
-          </div>
-          <CtrlButton
-            onClick={() => changeBet(1)}
-            disabled={betIndex === betLevels.length - 1}
-            ariaLabel="Increase bet"
-            className="h-10 w-10"
-          >
-            <TriangleIcon direction="right" />
-          </CtrlButton>
-        </div>
+      {/* Warm amber-to-dark-wood gradient bar grounding the whole control row — bg.webp's own
+       * art here is just open sky/desert fading to sand, with no distinct control-bar shape
+       * baked in, so without this the buttons/text below float directly on that busy scene with
+       * weak contrast. Colors pulled from the game's own palette (the gold/amber of the BAR and
+       * SPIN button art, the dark wood-brown of the side ladder signs) so it reads as part of
+       * the same machine rather than a bolted-on strip. Placed first among these siblings (no
+       * z-index needed) so every control below stacks on top of it in normal DOM order. */}
+      <div
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          height: 107,
+          background:
+            "linear-gradient(180deg, rgba(74,40,12,0) 0%, rgba(112,64,20,0.55) 16%, rgba(112,60,18,0.88) 34%, rgba(58,30,8,0.95) 64%, rgba(16,8,3,0.98) 100%)",
+          // borderTop: "1px solid rgba(255,205,110,0.55)",
+        }}
+      />
 
-        <div className="flex min-w-[220px] flex-1 max-w-sm items-center justify-center gap-2 rounded-lg border border-black bg-black/70 py-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.8)]">
-          <span className="text-md font-bold uppercase tracking-wide text-white">Win</span>
-          <span className="text-3xl font-black text-amber-300">{winAmount.toFixed(2)}</span>
-        </div>
+      <div className="absolute" style={{ left: 49, top: 880, width: 84, height: 74, transform: "translate(-50%, -50%)" }}>
+        <ImgButton onClick={() => setShowPaytable((v) => !v)} src={BUTTON_IMAGES.setting} alt="Paytable" className="h-full w-full" />
+      </div>
 
-        <div className="flex items-center gap-3">
-          <CtrlButton onClick={() => setTurbo((v) => !v)} active={turbo} ariaLabel="Turbo spin" className="h-[70px] w-[70px]">
-            <TurboIcon size={40} />
-          </CtrlButton>
+      <div
+        className="absolute flex flex-col items-center justify-center leading-tight rounded-xl border"
+        style={{
+          left: 211,
+          top: 880,
+          width: 190,
+          height: 46,
+          transform: "translate(-50%, -50%)",
+          background: "linear-gradient(180deg, rgba(122,72,24,0.85), rgba(52,27,8,0.9))",
+          borderColor: "rgba(255,205,110,0.45)",
+          boxShadow: "inset 0 1px 2px rgba(255,255,255,0.18), inset 0 -3px 6px rgba(0,0,0,0.35), 0 2px 5px rgba(0,0,0,0.4)",
+        }}
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wide text-amber-200/90">Credit</span>
+        <span className="text-xl font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]">
+          {(user?.balance ?? 0).toFixed(2)}
+        </span>
+      </div>
 
-          <CtrlButton
-            onClick={() => {
-              sound.resumeAudio();
-              setAutoplay((v) => !v);
-            }}
-            active={autoplay}
-            ariaLabel="Autoplay"
-          >
-            <span className="flex h-[70px] w-[100px] items-center justify-center text-xl font-black text-black">AUTO</span>
-          </CtrlButton>
+      <div className="absolute" style={{ left: 372, top: 880, width: 72, height: 72, transform: "translate(-50%, -50%)" }}>
+        <ImgButton onClick={() => changeBet(-1)} disabled={betIndex === 0} src={BUTTON_IMAGES.minus} alt="Decrease bet" className="h-full w-full" />
+      </div>
 
-          <button
-            onClick={() => runSpin()}
-            disabled={!ready || spinning}
-            className={`relative flex h-[70px] w-[200px] items-center justify-center rounded-3xl border-2 text-4xl font-black italic tracking-wide text-white transition-colors duration-150 active:translate-y-[3px] disabled:active:translate-y-0 ${
-              spinning
-                ? "border-red-950 bg-gradient-to-b from-red-500 via-red-600 to-red-800"
-                : "border-orange-950 bg-gradient-to-b from-yellow-300 via-amber-500 to-orange-600 disabled:opacity-50"
-            }`}
-            style={{
-              boxShadow: spinning
-                ? "0 5px 0 #450a0a, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.35), inset 0 -5px 8px rgba(0,0,0,0.3)"
-                : "0 5px 0 #7c2d12, 0 9px 14px rgba(0,0,0,0.55), inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -5px 8px rgba(0,0,0,0.3)",
-            }}
-          >
-            <span className="pointer-events-none absolute inset-x-[12%] top-[10%] h-[30%] rounded-full bg-white/40" style={{ filter: "blur(3px)" }} />
-            SPIN
-          </button>
-        </div>
+      <div
+        className="absolute flex flex-col items-center justify-center leading-tight rounded-xl border"
+        style={{
+          left: 454,
+          top: 880,
+          width: 70,
+          height: 46,
+          transform: "translate(-50%, -50%)",
+          background: "linear-gradient(180deg, rgba(122,72,24,0.85), rgba(52,27,8,0.9))",
+          borderColor: "rgba(255,205,110,0.45)",
+          boxShadow: "inset 0 1px 2px rgba(255,255,255,0.18), inset 0 -3px 6px rgba(0,0,0,0.35), 0 2px 5px rgba(0,0,0,0.4)",
+        }}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-300">Bet</span>
+        <span className="text-lg font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]">
+          {betAmount.toFixed(2)}
+        </span>
+      </div>
+
+      <div className="absolute" style={{ left: 537, top: 880, width: 75, height: 75, transform: "translate(-50%, -50%)" }}>
+        <ImgButton
+          onClick={() => changeBet(1)}
+          disabled={betIndex === betLevels.length - 1}
+          src={BUTTON_IMAGES.plus}
+          alt="Increase bet"
+          className="h-full w-full"
+        />
+      </div>
+
+      <div
+        className="absolute flex items-center justify-center gap-2 rounded-xl border"
+        style={{
+          left: 836,
+          top: 878,
+          width: 420,
+          height: 67,
+          transform: "translate(-50%, -50%)",
+          background: "linear-gradient(180deg, rgba(122,72,24,0.85), rgba(52,27,8,0.9))",
+          borderColor: "rgba(255,205,110,0.45)",
+          boxShadow: "inset 0 1px 2px rgba(255,255,255,0.18), inset 0 -3px 6px rgba(0,0,0,0.35), 0 2px 5px rgba(0,0,0,0.4)",
+        }}
+      >
+        <span className="text-md font-bold uppercase tracking-wide text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]">Win</span>
+        <span className="text-3xl font-black text-amber-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">
+          {winAmount.toFixed(2)}
+        </span>
+      </div>
+
+      <div className="absolute" style={{ left: 1214, top: 880, width: 77, height: 77, transform: "translate(-50%, -50%)" }}>
+        <ImgButton onClick={() => setTurbo((v) => !v)} active={turbo} src={BUTTON_IMAGES.turbo} alt="Turbo spin" className="h-full w-full" />
+      </div>
+
+      <div className="absolute" style={{ left: 1325, top: 883, width: 108, height: 75, transform: "translate(-50%, -50%)" }}>
+        <ImgButton
+          onClick={() => {
+            sound.resumeAudio();
+            setAutoplay((v) => !v);
+          }}
+          active={autoplay}
+          src={BUTTON_IMAGES.auto}
+          alt="Autoplay"
+          className="h-full w-full"
+        />
+      </div>
+
+      <div className="absolute" style={{ left: 1534, top: 878, width: 245, height: 105, transform: "translate(-50%, -50%)" }}>
+        <ImgButton
+          onClick={() => runSpin()}
+          disabled={!ready || spinning}
+          dimDisabled={!spinning}
+          src={spinning ? BUTTON_IMAGES.spinRed : BUTTON_IMAGES.spinGreen}
+          alt="Spin"
+          className="h-full w-full"
+        />
       </div>
     </div>
     </div>
@@ -408,12 +484,43 @@ function PaytableModal({ config, onClose }: { config: Buffalo777ConfigResponse; 
   );
 }
 
-function HomeIcon({ size = 18 }: { size?: number }) {
+/**
+ * A flat image-based button (the game's own art already includes its bevel/circle or pill
+ * chrome, so this is just the click/disabled/active behavior around an <img>) — a shrink on
+ * press, dimmed + inert while disabled, and a soft glow while toggled on (turbo/autoplay),
+ * since none of the source art ships a separate "active" variant.
+ */
+function ImgButton({
+  onClick,
+  src,
+  alt,
+  active = false,
+  disabled = false,
+  dimDisabled = true,
+  className = "",
+}: {
+  onClick: () => void;
+  src: string;
+  alt: string;
+  active?: boolean;
+  disabled?: boolean;
+  /** Set false for a disabled state that should still read at full opacity/crispness (e.g. the
+   * Spin button's red "spinning" art) — disabled still blocks clicks either way. */
+  dimDisabled?: boolean;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={alt}
+      className={`relative flex items-center justify-center transition-transform duration-100 ease-out active:scale-90 disabled:active:scale-100 disabled:pointer-events-none ${
+        dimDisabled ? "disabled:opacity-40" : ""
+      } ${active ? "drop-shadow-[0_0_10px_rgba(251,191,36,0.85)] brightness-110" : ""} ${className}`}
+    >
+      <img src={src} alt={alt} className="z-10 h-full w-full select-none object-contain" draggable={false} />
+    </button>
   );
 }
 
@@ -469,33 +576,6 @@ function CtrlButton({
       />
       {children}
     </button>
-  );
-}
-
-function TriangleIcon({ direction }: { direction: "left" | "right" }) {
-  const points = direction === "left" ? "15,4 6,12 15,20" : "9,4 18,12 9,20";
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24">
-      <polygon points={points} fill="black" />
-    </svg>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.4">
-      <circle cx="12" cy="12" r="9.5" />
-      <line x1="12" y1="11" x2="12" y2="16.5" strokeLinecap="round" />
-      <circle cx="12" cy="7.3" r="1.1" fill="black" stroke="none" />
-    </svg>
-  );
-}
-
-function TurboIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="black" stroke="none">
-      <polygon points="13,2 3,14 11,14 9,22 21,9 13,9" />
-    </svg>
   );
 }
 

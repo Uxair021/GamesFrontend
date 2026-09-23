@@ -2,6 +2,14 @@ import { Suspense, useEffect, useRef } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { getGameBySlug } from "../games/registry";
 import { resumeAudio } from "../games/shared/sound/soundEngine";
+import { MOBILE_BREAKPOINT_QUERY } from "../components/LandscapeGate";
+
+/** screen.orientation.lock() isn't in TypeScript's bundled DOM lib (it's still non-standard —
+ * Safari/iOS never implemented it at all), so it needs its own narrow type here rather than a
+ * blind `any` cast. */
+type LockableScreenOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+};
 
 export function GamePage() {
   const { slug } = useParams();
@@ -14,13 +22,31 @@ export function GamePage() {
    * a real user gesture (the tap/click that navigated here) — works on most Chrome-family
    * browsers and silently no-ops where refused (notably iOS Safari, or a stale gesture),
    * which just falls back to the normal (non-fullscreen) browser view.
+   *
+   * On a phone-width screen, once fullscreen is granted, also try to force landscape via the
+   * Screen Orientation API — on Android Chrome-family browsers this actually rotates the page
+   * even if the phone's own OS-level auto-rotate is switched off, which is the closest a website
+   * can get to "auto-rotate" without a native app wrapper. iOS Safari doesn't implement `lock` at
+   * all (feature-detected below, not just try/caught), so this silently no-ops there — LandscapeGate
+   * is what carries the rest of the way for iOS players.
    */
   useEffect(() => {
-    pageRef.current?.requestFullscreen().catch(() => {
-      /* refused without a fresh-enough gesture — the game is still fully usable, just not fullscreen */
-    });
+    pageRef.current
+      ?.requestFullscreen()
+      .then(() => {
+        const orientation = screen.orientation as LockableScreenOrientation | undefined;
+        if (orientation?.lock && window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches) {
+          orientation.lock("landscape").catch(() => {
+            /* refused (e.g. some in-app browsers) — LandscapeGate's portrait prompt covers this */
+          });
+        }
+      })
+      .catch(() => {
+        /* refused without a fresh-enough gesture — the game is still fully usable, just not fullscreen */
+      });
     return () => {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      (screen.orientation as LockableScreenOrientation | undefined)?.unlock?.();
     };
   }, [slug]);
 

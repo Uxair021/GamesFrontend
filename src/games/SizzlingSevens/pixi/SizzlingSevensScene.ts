@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Texture } from "pixi.js";
 import { AnimatedGIF } from "@pixi/gif";
 import { Reel } from "./Reel";
-import { loadSymbolTextures, loadWinGifAnimations } from "./symbols";
+import { loadSymbolTextures, loadWinGifAnimations, loadWinFrameAnimations } from "./symbols";
 import { Grid, SizzlingSymbol } from "../api";
 
 export const CANVAS_WIDTH = 1920;
@@ -49,6 +49,7 @@ export class SizzlingSevensScene {
   private root: Container;
   private reels: Reel[] = [];
   private gifTemplates: Partial<Record<SizzlingSymbol, AnimatedGIF>>;
+  private frameAnimations: Partial<Record<SizzlingSymbol, Texture[]>>;
   /** Live from GET /config (see api.ts) — used only to decide, purely visually, whether a
    * peeked grid is a winner (see isWinningGrid/freezeSpin), never to compute a payout. */
   private paylines: [number, number, number][];
@@ -69,10 +70,12 @@ export class SizzlingSevensScene {
     app: Application,
     textures: Record<SizzlingSymbol, Texture>,
     gifTemplates: Partial<Record<SizzlingSymbol, AnimatedGIF>>,
+    frameAnimations: Partial<Record<SizzlingSymbol, Texture[]>>,
     symbolWeights: Partial<Record<SizzlingSymbol, number>>,
     paylines: [number, number, number][]
   ) {
     this.gifTemplates = gifTemplates;
+    this.frameAnimations = frameAnimations;
     this.paylines = paylines;
     this.root = new Container();
     app.stage.addChild(this.root);
@@ -97,7 +100,15 @@ export class SizzlingSevensScene {
     this.root.addChild(backdrop);
 
     for (let i = 0; i < REEL_COUNT; i++) {
-      const reel = new Reel(textures, gifTemplates, cellWidth, cellHeight, symbolWeights, REEL_PHASE_OFFSETS[i] ?? 0);
+      const reel = new Reel(
+        textures,
+        gifTemplates,
+        frameAnimations,
+        cellWidth,
+        cellHeight,
+        symbolWeights,
+        REEL_PHASE_OFFSETS[i] ?? 0
+      );
       reel.view.x = areaLeft + i * (cellWidth + gap);
       reel.view.y = areaTop;
       reel.showStatic(["BAR", "BAR", "BAR"]);
@@ -146,8 +157,12 @@ export class SizzlingSevensScene {
     symbolWeights: Partial<Record<SizzlingSymbol, number>> = {},
     paylines: [number, number, number][] = []
   ): Promise<SizzlingSevensScene> {
-    const [textures, gifTemplates] = await Promise.all([loadSymbolTextures(), loadWinGifAnimations()]);
-    return new SizzlingSevensScene(app, textures, gifTemplates, symbolWeights, paylines);
+    const [textures, gifTemplates, frameAnimations] = await Promise.all([
+      loadSymbolTextures(),
+      loadWinGifAnimations(),
+      loadWinFrameAnimations(),
+    ]);
+    return new SizzlingSevensScene(app, textures, gifTemplates, frameAnimations, symbolWeights, paylines);
   }
 
   showStaticGrid(grid: Grid): void {
@@ -251,6 +266,7 @@ export class SizzlingSevensScene {
     this.clearWinAnimations();
     this.reels.forEach((r) => r.destroy());
     Object.values(this.gifTemplates).forEach((template) => template?.destroy());
+    Object.values(this.frameAnimations).forEach((frames) => frames?.forEach((t) => t.destroy(true)));
     this.root.destroy({ children: true });
   }
 }

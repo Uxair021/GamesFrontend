@@ -26,3 +26,53 @@ body {
   color: #f1f5f9;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+/* --- /home1 /home2 /home3 design tokens (ported from a separate GameFun project) ---------
+ * Scoped to a custom-property namespace ("nx-*") so nothing here touches this app's existing
+ * colors/fonts — only the ported homepage components (src/pages/homepages/) reference these,
+ * via Tailwind arbitrary-value syntax (e.g. border-[color:var(--color-nx-gold)]). The `brand-*`
+ * colors and title/stats/ui/jackpot fonts are real Tailwind utilities instead — see
+ * tailwind.config.js's theme.extend. */
+:root {
+  --color-nx-bg: #0e0a1a;
+  --color-nx-surface: #17122a;
+  --color-nx-surface-2: #1f1836;
+  --color-nx-purple: #6d28d9;
+  --color-nx-violet: #9333ea;
+  --color-nx-gold: #f5b942;
+  --color-nx-pink: #ec4899;
+  --color-nx-cyan: #22d3ee;
+  --color-nx-green: #22c55e;
+}
+
+.homepages-scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-nx-surface-2) transparent;
+}
+
+.homepages-scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.homepages-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.homepages-click-glow {
+  animation: homepages-click-glow-pulse 650ms ease-out forwards;
+}
+
+@keyframes homepages-click-glow-pulse {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}

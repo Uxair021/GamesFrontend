@@ -28,9 +28,18 @@ const AdminRtpPage = lazy(() => import("./admin/AdminRtpPage").then((m) => ({ de
 const AdminBuffaloRtpPage = lazy(() =>
   import("./admin/AdminBuffaloRtpPage").then((m) => ({ default: m.AdminBuffaloRtpPage }))
 );
+const AdminSizzlingRtpPage = lazy(() =>
+  import("./admin/AdminSizzlingRtpPage").then((m) => ({ default: m.AdminSizzlingRtpPage }))
+);
 const AdminLiveFeedPage = lazy(() =>
   import("./admin/AdminLiveFeedPage").then((m) => ({ default: m.AdminLiveFeedPage }))
 );
+
+// Ported from a separate project (GameFun) — each brings its own full-bleed header/chrome, so
+// they're excluded from the global Navbar below, same as /games/*.
+const Home1Page = lazy(() => import("./pages/homepages/Home1/Home1Page").then((m) => ({ default: m.Home1Page })));
+const Home2Page = lazy(() => import("./pages/homepages/Home2/Home2Page").then((m) => ({ default: m.Home2Page })));
+const Home3Page = lazy(() => import("./pages/homepages/Home3/Home3Page").then((m) => ({ default: m.Home3Page })));
 
 function AdminFallback() {
   return <div className="p-8 text-center text-slate-500">Loading admin panel...</div>;
@@ -38,7 +47,9 @@ function AdminFallback() {
 
 function AppShell() {
   const location = useLocation();
-  const hideNavbar = location.pathname.startsWith("/games/");
+  const hideNavbar =
+    location.pathname.startsWith("/games/") ||
+    ["/home1", "/home2", "/home3"].includes(location.pathname);
 
   return (
     <>
@@ -46,6 +57,30 @@ function AppShell() {
       <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/home1"
+            element={
+              <Suspense fallback={null}>
+                <Home1Page />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/home2"
+            element={
+              <Suspense fallback={null}>
+                <Home2Page />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/home3"
+            element={
+              <Suspense fallback={null}>
+                <Home3Page />
+              </Suspense>
+            }
+          />
           <Route
             path="/panel"
             element={
@@ -127,6 +162,14 @@ function AppShell() {
               element={
                 <Suspense fallback={<AdminFallback />}>
                   <AdminBuffaloRtpPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="sizzling-rtp"
+              element={
+                <Suspense fallback={<AdminFallback />}>
+                  <AdminSizzlingRtpPage />
                 </Suspense>
               }
             />
