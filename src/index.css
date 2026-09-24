@@ -20,6 +20,14 @@ body,
   height: 100%;
 }
 
+html {
+  /* Belt-and-suspenders against any single element (a fixed-width row, an un-wrapped flex group,
+   * etc.) accidentally forcing a horizontal scrollbar on narrow/mobile viewports — the actual fix
+   * for any such element is still to make that element responsive, not to rely on this clipping
+   * it, but this keeps one overlooked element from breaking the whole page's layout meanwhile. */
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background-color: #020617;

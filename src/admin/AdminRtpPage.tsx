@@ -11,9 +11,6 @@ import {
   solveVegasHitsLossPercent,
   solveVegasHitsRtpPercent,
   VH_DEFAULT_WILD_RULES,
-  LOL_REGULAR_SYMBOLS,
-  LOL_DEFAULT_SYMBOL_PAYOUTS,
-  LOL_DEFAULT_SCATTER_RULES,
 } from "./adminApi";
 import { gameRegistry } from "../games/registry";
 
@@ -381,12 +378,12 @@ function inputClass(invalid = false): string {
   }`;
 }
 
-// Buffalo777 and Sizzling 7s both run fully client-side now (no backend paytable document to
-// fetch/save — see their own dedicated AdminBuffaloRtpPage/AdminSizzlingRtpPage, which read and
-// write localStorage instead), so this page — which only knows how to talk to the backend
-// paytable service — would 404/500 on either one. Excluded here rather than left to be
-// discovered by a broken tab click.
-const OFFLINE_GAME_SLUGS = new Set(["buffalo-777", "sizzling-7s"]);
+// Buffalo777, Sizzling 7s, and Life of Luxury all run fully client-side now (no backend paytable
+// document to fetch/save — see their own dedicated AdminBuffaloRtpPage/AdminSizzlingRtpPage/
+// AdminLifeOfLuxuryRtpPage, which read and write localStorage instead), so this page — which only
+// knows how to talk to the backend paytable service — would 404/500 on any of them. Excluded here
+// rather than left to be discovered by a broken tab click.
+const OFFLINE_GAME_SLUGS = new Set(["buffalo-777", "sizzling-7s", "life-of-luxury"]);
 const RTP_CONTROLLED_GAMES = gameRegistry.filter((g) => !OFFLINE_GAME_SLUGS.has(g.slug));
 
 export function AdminRtpPage() {
@@ -417,13 +414,7 @@ export function AdminRtpPage() {
               wildRules: res.config.wildRules ?? VH_DEFAULT_WILD_RULES,
               reelStateConfig: res.config.reelStateConfig ?? { centerRowChancePercent: 50 },
             }
-          : gameId === "life-of-luxury"
-            ? {
-                ...res.config,
-                symbolPayouts: res.config.symbolPayouts ?? LOL_DEFAULT_SYMBOL_PAYOUTS,
-                scatterRules: res.config.scatterRules ?? LOL_DEFAULT_SCATTER_RULES,
-              }
-            : res.config;
+          : res.config;
       setConfig(config);
     });
   }, [gameId]);
@@ -505,22 +496,6 @@ export function AdminRtpPage() {
     setSavedOk(false);
     setConfig({ ...config, wildRules: { ...config.wildRules, ...patch } });
   }
-
-  function updateSymbolPayout(symbol: string, patch: Partial<{ x3: number; x4: number; x5: number }>) {
-    if (!config?.symbolPayouts) return;
-    setSavedOk(false);
-    setConfig({
-      ...config,
-      symbolPayouts: { ...config.symbolPayouts, [symbol]: { ...config.symbolPayouts[symbol], ...patch } },
-    });
-  }
-
-  function updateScatterRules(patch: Partial<{ chancePercent: number; x3: number; x4: number; x5: number; freeSpinsAwarded: number }>) {
-    if (!config?.scatterRules) return;
-    setSavedOk(false);
-    setConfig({ ...config, scatterRules: { ...config.scatterRules, ...patch } });
-  }
-
 
   // Changing the Target RTP re-scales the win-tier frequencies (proportionally, keeping their
   // relative rarity the same) so the config is instantly valid again at the new target — the
@@ -1121,124 +1096,6 @@ export function AdminRtpPage() {
                     value={config.wildRules.twoCompleteMultiplier}
                     onChange={(e) => updateWildRules({ twoCompleteMultiplier: Number(e.target.value) })}
                     className={`${inputClass()} mt-1 w-32`}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {config.gameId === "life-of-luxury" && config.symbolPayouts && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="text-sm font-semibold text-slate-800">Symbol payouts (x line bet)</div>
-              <p className="mt-1 text-xs text-slate-500">
-                Each symbol's own 3/4/5-of-a-kind payout — matched left-to-right on an active line, minimum 3.
-                These don't correspond to the Frequency % rows above (those are reel-strip draw weight); this is
-                the actual paytable.
-              </p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-sky-700 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                    <tr>
-                      <th className="py-1 pr-3">Symbol</th>
-                      <th className="py-1 pr-3">X3</th>
-                      <th className="py-1 pr-3">X4</th>
-                      <th className="py-1 pr-3">X5</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {LOL_REGULAR_SYMBOLS.map((symbol) => (
-                      <tr key={symbol} className="border-t border-slate-200">
-                        <td className="py-2 pr-3 font-medium text-slate-800">
-                          <div className="flex items-center gap-2">
-                            {tierImage("life-of-luxury", symbol) && (
-                              <img src={tierImage("life-of-luxury", symbol)} alt="" className="h-8 w-8 rounded object-contain bg-slate-100" />
-                            )}
-                            {TIER_LABELS[symbol]}
-                          </div>
-                        </td>
-                        {(["x3", "x4", "x5"] as const).map((field) => (
-                          <td key={field} className="py-2 pr-3">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={config.symbolPayouts![symbol][field]}
-                              onChange={(e) => updateSymbolPayout(symbol, { [field]: Number(e.target.value) })}
-                              className={`${inputClass()} w-24`}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {config.gameId === "life-of-luxury" && config.scatterRules && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="text-sm font-semibold text-slate-800">Coin scatter rules</div>
-              <p className="mt-1 text-xs text-slate-500">
-                Coin is rolled independently on every cell at its own Chance % below — it is NOT one of the
-                Frequency % rows above (those 10 rows are the 9 payout symbols + Filler, summing to 100% on their
-                own). Coin counts anywhere on the 5x3 grid (no payline needed). X3/X4/X5 are multiples of the bet
-                (this game has no per-line split — what you bet is what's deducted). X5 also covers 5 or more (15
-                cells can hold more than 5). A 3+ trigger on a base spin awards the free spins below; a coin
-                during an already-active free-spins round still pays its cash prize but never awards more free
-                spins (no retriggering).
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-5">
-                <div>
-                  <label className="block text-xs text-slate-500">Chance % (per cell)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    max={100}
-                    value={config.scatterRules.chancePercent}
-                    onChange={(e) => updateScatterRules({ chancePercent: Number(e.target.value) })}
-                    className={`${inputClass()} mt-1 w-28`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">X3 (bet)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.scatterRules.x3}
-                    onChange={(e) => updateScatterRules({ x3: Number(e.target.value) })}
-                    className={`${inputClass()} mt-1 w-28`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">X4 (bet)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.scatterRules.x4}
-                    onChange={(e) => updateScatterRules({ x4: Number(e.target.value) })}
-                    className={`${inputClass()} mt-1 w-28`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">X5+ (bet)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.scatterRules.x5}
-                    onChange={(e) => updateScatterRules({ x5: Number(e.target.value) })}
-                    className={`${inputClass()} mt-1 w-28`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">Free spins awarded</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min={0}
-                    value={config.scatterRules.freeSpinsAwarded}
-                    onChange={(e) => updateScatterRules({ freeSpinsAwarded: Number(e.target.value) })}
-                    className={`${inputClass()} mt-1 w-28`}
                   />
                 </div>
               </div>

@@ -31,6 +31,9 @@ const AdminBuffaloRtpPage = lazy(() =>
 const AdminSizzlingRtpPage = lazy(() =>
   import("./admin/AdminSizzlingRtpPage").then((m) => ({ default: m.AdminSizzlingRtpPage }))
 );
+const AdminLifeOfLuxuryRtpPage = lazy(() =>
+  import("./admin/AdminLifeOfLuxuryRtpPage").then((m) => ({ default: m.AdminLifeOfLuxuryRtpPage }))
+);
 const AdminLiveFeedPage = lazy(() =>
   import("./admin/AdminLiveFeedPage").then((m) => ({ default: m.AdminLiveFeedPage }))
 );
@@ -47,7 +50,12 @@ function AdminFallback() {
 
 function AppShell() {
   const location = useLocation();
+  // "/" (HomePage) has its own complete chrome (Sidebar + TopBar, both already mobile-responsive
+  // and already showing the same balance/account/logo Navbar would) — stacking Navbar on top of
+  // that duplicated the balance pill and, since Navbar itself never wraps/shrinks, forced the
+  // whole page wider than the viewport on narrow screens.
   const hideNavbar =
+    location.pathname === "/" ||
     location.pathname.startsWith("/games/") ||
     ["/home1", "/home2", "/home3"].includes(location.pathname);
 
@@ -170,6 +178,14 @@ function AppShell() {
               element={
                 <Suspense fallback={<AdminFallback />}>
                   <AdminSizzlingRtpPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="life-of-luxury-rtp"
+              element={
+                <Suspense fallback={<AdminFallback />}>
+                  <AdminLifeOfLuxuryRtpPage />
                 </Suspense>
               }
             />

@@ -1115,93 +1115,6 @@ function computeCrystalCloverRtpPercent(config: PaytableConfig): number {
   return baseRtp * multiplierEV * 100;
 }
 
-/** Mirrors games/LifeOfLuxury/config.ts's REGULAR_SYMBOLS/DEFAULT_SYMBOL_PAYOUTS/
- * DEFAULT_SCATTER_RULES. Exported so AdminRtpPage.tsx can backfill a saved config whose
- * document predates these fields (still `null` from the DB) into something immediately
- * editable. */
-export const LOL_REGULAR_SYMBOLS = [
-  "AEROPLANE",
-  "BOAT",
-  "CAR",
-  "RING",
-  "MONEY",
-  "WATCH",
-  "GOLD_BAR",
-  "SILVER_BAR",
-  "BRONZE_BAR",
-] as const;
-export const LOL_DEFAULT_SYMBOL_PAYOUTS: Record<(typeof LOL_REGULAR_SYMBOLS)[number], { x3: number; x4: number; x5: number }> = {
-  AEROPLANE: { x3: 2.7, x4: 26.97, x5: 269.69 },
-  BOAT: { x3: 1.62, x4: 10.79, x5: 53.94 },
-  CAR: { x3: 1.08, x4: 5.39, x5: 26.97 },
-  RING: { x3: 0.81, x4: 4.05, x5: 10.79 },
-  MONEY: { x3: 0.54, x4: 2.7, x5: 10.79 },
-  WATCH: { x3: 0.54, x4: 1.62, x5: 8.09 },
-  GOLD_BAR: { x3: 0.27, x4: 1.62, x5: 8.09 },
-  SILVER_BAR: { x3: 0.27, x4: 1.08, x5: 6.47 },
-  BRONZE_BAR: { x3: 0.27, x4: 1.08, x5: 5.39 },
-};
-export const LOL_DEFAULT_SCATTER_RULES = { chancePercent: 3, x3: 0.37, x4: 2.79, x5: 18.57, freeSpinsAwarded: 10 };
-const LOL_WILD_SYMBOL = "WILD";
-const LOL_WILD_ALLOWED_REELS: readonly number[] = [1, 2, 3];
-const LOL_REEL_COUNT = 5;
-const LOL_ROW_COUNT = 3;
-const LOL_SCATTER_TRIGGER_COUNT = 3;
-
-function lolNChooseK(n: number, k: number): number {
-  let result = 1;
-  for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
-  return result;
-}
-
-/** Mirrors the backend's computeLifeOfLuxuryRtpPercent (services/paytableConfig.ts) exactly —
- * closed-form, no simulation. Coin is rolled as its own independent per-cell chance
- * (scatterRules.chancePercent), NOT a share of `tiers`. WILD IS a share of `tiers` and genuinely
- * substitutes into a payline run, restricted to reels 2-4 (LOL_WILD_ALLOWED_REELS) — reels 1/5
- * draw only the 9 real symbols, renormalized to sum to 100% there. Every line pays the full bet
- * (no per-line split) and every line shares the same reel-index structure, so the total is
- * LINE_COUNT times one line's own expectation — see the backend function's doc comment for the
- * full per-position derivation. */
-function computeLifeOfLuxuryRtpPercent(config: PaytableConfig): number {
-  const weightOf = (symbol: string) => config.tiers.find((t) => t.key === symbol)?.frequencyPercent ?? 0;
-  const payoutOf = (symbol: (typeof LOL_REGULAR_SYMBOLS)[number]) => config.symbolPayouts?.[symbol] ?? LOL_DEFAULT_SYMBOL_PAYOUTS[symbol];
-
-  const scatterRules = config.scatterRules ?? LOL_DEFAULT_SCATTER_RULES;
-  const coinChance = scatterRules.chancePercent / 100;
-  const wildWeight = weightOf(LOL_WILD_SYMBOL);
-  const outerDenom = 100 - wildWeight;
-  const isMiddle = (reelIndex: number) => LOL_WILD_ALLOWED_REELS.includes(reelIndex);
-
-  let perLineSum = 0;
-  for (const symbol of LOL_REGULAR_SYMBOLS) {
-    const weight = weightOf(symbol);
-    const pOuter = outerDenom > 0 ? weight / outerDenom : 0;
-    const pMiddle = (weight + wildWeight) / 100;
-    const matchAt = (reelIndex: number) => (1 - coinChance) * (isMiddle(reelIndex) ? pMiddle : pOuter);
-    const m = [0, 1, 2, 3, 4].map(matchAt);
-
-    const payout = payoutOf(symbol);
-    const P3 = m[0] * m[1] * m[2] * (1 - m[3]);
-    const P4 = m[0] * m[1] * m[2] * m[3] * (1 - m[4]);
-    const P5 = m[0] * m[1] * m[2] * m[3] * m[4];
-    perLineSum += P3 * payout.x3 + P4 * payout.x4 + P5 * payout.x5;
-  }
-  const lineRTP = 15 * perLineSum;
-
-  const cellCount = LOL_REEL_COUNT * LOL_ROW_COUNT;
-  let scatterRTP = 0;
-  let triggerProb = 0;
-  for (let k = LOL_SCATTER_TRIGGER_COUNT; k <= cellCount; k++) {
-    const prob = lolNChooseK(cellCount, k) * Math.pow(coinChance, k) * Math.pow(1 - coinChance, cellCount - k);
-    const multiplier = k === 3 ? scatterRules.x3 : k === 4 ? scatterRules.x4 : scatterRules.x5;
-    scatterRTP += prob * multiplier;
-    triggerProb += prob;
-  }
-
-  const freeSpinEV = triggerProb * scatterRules.freeSpinsAwarded * (lineRTP + scatterRTP);
-  return (lineRTP + scatterRTP + freeSpinEV) * 100;
-}
-
 /** Rubber Duck's 14 paying symbols and BONUS's own key — mirrors games/RubberDuck/config.ts. */
 const RD_PAYING_SYMBOLS: TierKey[] = [
   "TRIPLE_7",
@@ -1355,10 +1268,6 @@ export function computeRtpPercent(config: PaytableConfig): number {
 
   if (config.gameId === "rubber-duck") {
     return computeRubberDuckRtpPercent(config);
-  }
-
-  if (config.gameId === "life-of-luxury") {
-    return computeLifeOfLuxuryRtpPercent(config);
   }
 
   if (config.gameId === "5x-rewind") {

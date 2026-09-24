@@ -2,11 +2,6 @@ import { Container, Sprite, Texture } from "pixi.js";
 import { LifeOfLuxurySymbol } from "../api";
 
 const FILLER_COUNT = 78;
-/** The pre-spin "wind-up" nudge — a quick, smooth upward move of 10% of one row's height, played
- * immediately on spin start before the normal downward scroll begins (see spinTo). Mirrors the
- * anticipation-before-motion feel of a real mechanical reel catching before it spins. */
-const NUDGE_UP_FRACTION = 0.1;
-const NUDGE_DURATION_MS = 120;
 
 /**
  * A single reel, always showing exactly 3 rows (top/middle/bottom) — a plain classic grid, no
@@ -87,12 +82,7 @@ export class Reel {
   }
 
   /** Spins and lands exactly on `target` (server-predetermined). Continues from whatever is
-   * currently displayed: after `delay` (this reel's own start-of-sequence stagger, from
-   * LifeOfLuxuryScene's REEL_START_STAGGER_MS), a brief upward "wind-up" nudge (10% of one row's
-   * height) plays, then the normal top-to-bottom scroll with an ease-out landing follows — same
-   * duration/easing as before, just starting from the nudged position instead of directly from
-   * rest. `delay` gates the *whole* nudge+spin sequence, not just the main spin, so each reel's
-   * nudge fires at its own staggered moment too, not all at once. */
+   * currently displayed, scrolling top-to-bottom with an ease-out landing. */
   spinTo(target: [LifeOfLuxurySymbol, LifeOfLuxurySymbol, LifeOfLuxurySymbol], duration: number, delay: number): Promise<void> {
     if (this.visibleCells.length === 0) {
       this.showStatic([this.randomSymbol(), this.randomSymbol(), this.randomSymbol()]);
@@ -104,20 +94,15 @@ export class Reel {
     const targetCells = this.prependCells([target[2], target[1], target[0]]).reverse(); // -> [top, middle, bottom]
 
     const finalY = -this.nextSlotAbove * this.cellHeight;
-    const nudgeY = startY - this.cellHeight * NUDGE_UP_FRACTION;
 
     return new Promise((resolve) => {
       let rafId = 0;
-
-      const runMainSpin = () => {
-        // Continues from wherever the nudge left off (nudgeY), not from startY — the main
-        // spin's own duration/easing shape is otherwise identical to before.
-        const mainStartY = this.container.y;
+      const timeoutId = window.setTimeout(() => {
         const start = performance.now();
         const tick = (now: number) => {
           const t = Math.min(Math.max((now - start) / duration, 0), 1);
           const eased = 1 - Math.pow(1 - t, 3);
-          this.container.y = mainStartY + (finalY - mainStartY) * eased;
+          this.container.y = startY + (finalY - startY) * eased;
           if (t < 1) {
             rafId = requestAnimationFrame(tick);
           } else {
@@ -127,28 +112,8 @@ export class Reel {
           }
         };
         rafId = requestAnimationFrame(tick);
-      };
+      }, delay);
 
-      const runNudge = () => {
-        const nudgeStart = performance.now();
-        const nudgeTick = (now: number) => {
-          const t = Math.min(Math.max((now - nudgeStart) / NUDGE_DURATION_MS, 0), 1);
-          const eased = 1 - Math.pow(1 - t, 2);
-          this.container.y = startY + (nudgeY - startY) * eased;
-          if (t < 1) {
-            rafId = requestAnimationFrame(nudgeTick);
-          } else {
-            runMainSpin();
-          }
-        };
-        rafId = requestAnimationFrame(nudgeTick);
-      };
-
-      // This reel's own staggered start — both the nudge and the main spin that follows it wait
-      // for this same delay, so reel i's entire sequence begins `delay` ms after spinTo() was
-      // called (LifeOfLuxuryScene.spin() calls spinTo() on all 5 reels synchronously, passing a
-      // different `delay` per reel).
-      const timeoutId = window.setTimeout(runNudge, delay);
       this.pendingTimeouts.push(timeoutId);
       this.pendingFrames.push(() => cancelAnimationFrame(rafId));
     });

@@ -13,7 +13,7 @@ import {
   PaylinePattern,
   WinHighlightGroup,
 } from "./pixi/LifeOfLuxuryScene";
-import { getLifeOfLuxuryConfig, spinRequest, logSpinResult, Grid } from "./api";
+import { getLifeOfLuxuryConfig, spinRequest, Grid } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { FreeSpinIntro } from "./FreeSpinIntro";
 import { FreeSpinOutro } from "./FreeSpinOutro";
@@ -382,23 +382,11 @@ export function LifeOfLuxuryGame() {
 
       try {
         const spinBet = isFreeSpin ? betLevels[freeSpins?.lockedBetIndex ?? betIndex] : bet;
-        const result = await spinRequest(spinBet, isFreeSpin, user?.balance ?? 0);
+        const result = await spinRequest(spinBet, isFreeSpin);
         await sceneRef.current.spin(result.grid, fast);
 
         setWinAmount(result.winAmount);
         setBalance(result.balance);
-
-        // Fire-and-forget — purely for the admin dashboard's record-keeping, gameplay never
-        // waits on or depends on this succeeding. winAmount includes this spin's own line/
-        // scatter win plus, on the free spin that ends a round, the round-end wild bonus —
-        // mirrors what the old backend's SpinHistory recorded (result.winAmount + bonusWin).
-        logSpinResult({
-          betAmount: isFreeSpin ? 0 : spinBet,
-          winAmount: result.winAmount + (result.freeSpinRoundResult?.bonusWin ?? 0),
-          reelSymbols: result.grid,
-          balanceAfter: result.balance,
-          tier: result.tier,
-        }).catch(() => {});
 
         if (result.evaluation.winningPositions.length > 0 || result.evaluation.scatter.triggered) {
           const groups = sceneRef.current.buildWinGroups(result.evaluation.lineWins, result.evaluation.scatter.positions, LINE_DOT_COLORS);

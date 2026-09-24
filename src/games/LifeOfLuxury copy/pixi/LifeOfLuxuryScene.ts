@@ -7,20 +7,10 @@ export const REEL_COUNT = 5;
 export const ROW_COUNT = 3;
 export const CELL_WIDTH = 250;
 export const CELL_HEIGHT = 250;
-export const COLUMN_GAP = 12;
+export const COLUMN_GAP = 10;
 
 export const GRID_WIDTH = REEL_COUNT * CELL_WIDTH + (REEL_COUNT - 1) * COLUMN_GAP;
 export const GRID_HEIGHT = ROW_COUNT * CELL_HEIGHT;
-
-/** How long each reel spins for, in ms, before the turbo/FAST multiplier (see spin() below) —
- * this is the number to raise for a slower spin, lower for a faster one. Applies equally to
- * every reel (each spins for exactly this long); the left-to-right stagger below is what then
- * makes them start, and finish, in sequence. */
-const SPIN_DURATION_MS = 2000;
-/** How long after one reel starts spinning before the next one begins, in ms, before the turbo
- * multiplier — 0.1s by default. Since every reel runs for the identical SPIN_DURATION_MS above,
- * this same stagger also carries through to when each one stops (reel 0 first, reel 4 last). */
-const REEL_START_STAGGER_MS = 100;
 
 /** Per-reel border is a single ring, but split diagonally (top-left corner to bottom-right
  * corner) into two colors — not two concentric rings. The top+right edges are one color, the
@@ -35,7 +25,7 @@ const SCATTER_BOX_COLOR = 0xffd700;
 /** Border width and connecting-bridge width are equal on purpose — a winning cell's border and
  * the bridge to its neighbor must read as one unbroken colored shape, not a thin line cutting
  * across the symbol art plus a separately-sized box. */
-const WIN_BORDER_WIDTH = 10;
+const WIN_BORDER_WIDTH = 8;
 /** Thinner/more transparent than a win border — this is a reference overlay ("here's where
  * line N runs"), not a "you won" indicator, so it should read as quieter. */
 const ALL_LINES_WIDTH = 8;
@@ -138,23 +128,13 @@ export class LifeOfLuxuryScene {
   }
 
   /** Spins all reels and lands on the server-predetermined grid. `grid[reel][row]`. `turbo`
-   * compresses every reel's duration/stagger by the same factor (see LifeOfLuxuryGame.tsx's FAST
-   * toggle). Every reel spins for the same SPIN_DURATION_MS, started REEL_START_STAGGER_MS apart
-   * (reel 0 first, then reel 1, ... reel 4 last) — since they all run the same length of time,
-   * that same left-to-right order also determines the stop order (reel 0 lands first, reel 4
-   * last), matching a classic mechanical slot machine's start/stop sequence. */
+   * compresses every reel's duration by the same factor (see LifeOfLuxuryGame.tsx's FAST toggle). */
   async spin(grid: LifeOfLuxurySymbol[][], turbo = false, onReelLand?: (index: number) => void): Promise<void> {
     this.clearWinHighlights();
     this.setAllPaylinesVisible(false);
     const speed = turbo ? 0.4 : 1;
     const spins = this.reels.map((reel, i) =>
-      reel
-        .spinTo(
-          grid[i] as [LifeOfLuxurySymbol, LifeOfLuxurySymbol, LifeOfLuxurySymbol],
-          SPIN_DURATION_MS * speed,
-          i * REEL_START_STAGGER_MS * speed
-        )
-        .then(() => onReelLand?.(i))
+      reel.spinTo(grid[i] as [LifeOfLuxurySymbol, LifeOfLuxurySymbol, LifeOfLuxurySymbol], (900 + i * 300) * speed, 0).then(() => onReelLand?.(i))
     );
     await Promise.all(spins);
   }

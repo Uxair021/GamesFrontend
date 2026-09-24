@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
+import { useRotatedViewportSize } from "./rotatedViewport";
 
 interface FitScaleOptions {
   maxWidth?: number;
@@ -31,13 +32,20 @@ interface FitScaleOptions {
 export function useFitScale(measureRefs: RefObject<HTMLElement | null>[], options: FitScaleOptions = {}): number {
   const { maxWidth = 900, reserveRef, extraShrink = 1, fillViewport = false } = options;
   const [scale, setScale] = useState(1);
+  // Normally null — see RotatedViewportContext's own doc comment for the one case (iOS, inside
+  // LandscapeGate's CSS-rotated wrapper) where the real window dimensions are backwards for
+  // sizing purposes and this carries the swapped pair to fit against instead.
+  const rotatedViewport = useRotatedViewportSize();
 
   useEffect(() => {
     function recompute() {
       const elements = measureRefs.map((r) => r.current).filter((el): el is HTMLElement => el !== null);
       if (elements.length === 0) return;
 
-      if (!fillViewport && window.innerWidth > maxWidth) {
+      const viewportWidth = rotatedViewport?.width ?? window.innerWidth;
+      const viewportHeight = rotatedViewport?.height ?? window.innerHeight;
+
+      if (!fillViewport && viewportWidth > maxWidth) {
         setScale(1);
         return;
       }
@@ -47,10 +55,10 @@ export function useFitScale(measureRefs: RefObject<HTMLElement | null>[], option
       if (!naturalWidth || !naturalHeight) return;
 
       const reserveHeight = reserveRef?.current?.offsetHeight ?? 0;
-      const availableHeight = Math.max(0, window.innerHeight - reserveHeight);
+      const availableHeight = Math.max(0, viewportHeight - reserveHeight);
 
       const cap = fillViewport ? Infinity : 1;
-      const fit = Math.min(cap, window.innerWidth / naturalWidth, availableHeight / naturalHeight);
+      const fit = Math.min(cap, viewportWidth / naturalWidth, availableHeight / naturalHeight);
       setScale(Math.min(cap, fit * extraShrink));
     }
 
@@ -68,7 +76,7 @@ export function useFitScale(measureRefs: RefObject<HTMLElement | null>[], option
     // measureRefs/reserveRef entries are stable useRef objects; the array
     // literal itself is intentionally not a dependency (see hook doc).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maxWidth, extraShrink, fillViewport]);
+  }, [maxWidth, extraShrink, fillViewport, rotatedViewport?.width, rotatedViewport?.height]);
 
   return scale;
 }
