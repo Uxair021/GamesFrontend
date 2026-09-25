@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Application } from "pixi.js";
 import { useAuth } from "../../context/AuthContext";
 import { SlotMachineScene, CANVAS_WIDTH, CANVAS_HEIGHT } from "./pixi/SlotMachineScene";
-import { getShamrockConfig, spinRequest, logSpinResult, ShamrockConfigResponse, WinTierName, WinRuleId } from "./api";
+import { getShamrockConfig, spinRequest, ShamrockConfigResponse, WinTierName, WinRuleId } from "./api";
 import { WinCelebration } from "../shared/WinCelebration";
 import { FreeSpinCelebration } from "./FreeSpinCelebration";
 import { LoadingScreen } from "../shared/LoadingScreen";
@@ -12,6 +12,7 @@ import * as sound from "../shared/sound/soundEngine";
 
 const DEFAULT_BET_LEVELS = [0.1, 0.25, 0.5, 1, 2, 5, 10];
 const DEFAULT_MAX_TOTAL_FREE_SPINS = 29;
+const WIN_GLOW_MIN_DISPLAY_MS = 2000;
 const BG_MUSIC_URL = "/Sound/alex-morgan-video-game-pixel-chiptune-music-583271.mp3";
 
 const WIN_RULE_LABELS: Record<WinRuleId, string> = {
@@ -58,6 +59,7 @@ export function ShamrockSpinGame() {
   const [freeSpinsWinnings, setFreeSpinsWinnings] = useState(0);
   const lockedBetRef = useRef(0);
   const winGlowActiveRef = useRef(false);
+  const winGlowStartRef = useRef(0);
 
   const betAmount = betLevels[betIndex] ?? betLevels[0];
   const inFreeSpins = freeSpinsRemaining > 0;
@@ -130,36 +132,29 @@ export function ShamrockSpinGame() {
       setSpinning(true);
       if (!freeSpin) setWinAmount(0);
 
-      // Clear a previous spin's win glow right away — never block the next spin starting.
+      // A previous spin's win glow must stay visible for at least WIN_GLOW_MIN_DISPLAY_MS
+      // before this new spin can clear it, even if the player hits SPIN again immediately.
       if (winGlowActiveRef.current) {
+        const remaining = WIN_GLOW_MIN_DISPLAY_MS - (Date.now() - winGlowStartRef.current);
+        if (remaining > 0) await new Promise((r) => window.setTimeout(r, remaining));
         sceneRef.current?.setWinGlow(false);
         winGlowActiveRef.current = false;
       }
       if (!sceneRef.current) return;
 
       try {
-        const result = await spinRequest(stake, freeSpin, user?.balance ?? 0);
+        const result = await spinRequest(stake, freeSpin);
         sound.startReelSpinLoop();
         await sceneRef.current.spin(result.reels, () => sound.playReelStop());
         sound.stopReelSpinLoop();
         setWinAmount(result.winAmount);
         setBalance(result.balance);
-
-        // Fire-and-forget — purely for the admin dashboard's record-keeping, gameplay never
-        // waits on or depends on this succeeding.
-        logSpinResult({
-          betAmount: freeSpin ? 0 : stake,
-          winAmount: result.winAmount,
-          reelSymbols: result.reels,
-          balanceAfter: result.balance,
-          tier: result.tier,
-        }).catch(() => {});
-
         if (freeSpin) setFreeSpinsWinnings((w) => w + result.winAmount);
 
         if (result.winAmount > 0) {
           sceneRef.current.setWinGlow(true);
           winGlowActiveRef.current = true;
+          winGlowStartRef.current = Date.now();
         }
 
         if (result.freeSpinsAwarded > 0) {
@@ -207,12 +202,6 @@ export function ShamrockSpinGame() {
     const id = window.setTimeout(() => runSpin(true), 900);
     return () => window.clearTimeout(id);
   }, [inFreeSpins, spinning, ready, freeSpinCelebration, runSpin]);
-
-  // Green reel-background overlay for the whole free-spin bonus round — on the instant free
-  // spins are awarded (freeSpinsRemaining becomes > 0), off when the round ends.
-  useEffect(() => {
-    sceneRef.current?.setFreeSpinOverlay(inFreeSpins);
-  }, [inFreeSpins]);
 
   // Reset the free-spins winnings tally once the bonus round ends.
   useEffect(() => {
@@ -289,7 +278,7 @@ export function ShamrockSpinGame() {
       {error && <div className="absolute left-1/2 top-1/2 -translate-x-1/2 mx-3 mt-2 rounded bg-red-900/60 px-10 py-5 text-5xl text-center text-red-100">{error}</div>}
 
       {!inFreeSpins && freeSpinsTotalAwarded > 0 && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 mx-3 mt-2 rounded-full bg-[#00832B] px-10 py-5 text-center text-5xl text-white z-10">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 mx-3 mt-2 rounded-full bg-amber-900/80 px-10 py-5 text-center text-5xl text-amber-200 z-10">
           Free spins complete — won {freeSpinsWinnings.toFixed(2)}
         </div>
       )}

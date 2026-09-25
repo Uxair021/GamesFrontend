@@ -11,6 +11,7 @@ const NAV = [
   { to: "/admin/buffalo-rtp", label: "Buffalo RTP", icon: Gauge },
   { to: "/admin/sizzling-rtp", label: "Sizzling RTP", icon: Gauge },
   { to: "/admin/life-of-luxury-rtp", label: "Life of Luxury RTP", icon: Gauge },
+  { to: "/admin/shamrock-rtp", label: "Shamrock RTP", icon: Gauge },
   { to: "/admin/live-feed", label: "Live Feed", icon: Radio },
 ];
 

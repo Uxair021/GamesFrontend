@@ -6,14 +6,9 @@ import { Reel } from "./Reel";
 const REEL_COUNT = 3;
 const VISIBLE_ROWS = 3;
 const COLUMN_GAP = 3;
-/** Base spin duration for the first reel to land; each subsequent reel lands REEL_STOP_STAGGER_MS
- * later than the previous one — all 3 start spinning at the same instant (right after the shared
- * nudge-up), only their stop times are staggered. */
-const SPIN_DURATION_MS = 900;
-const REEL_STOP_STAGGER_MS = 300;
 
 // Fractional position of the reel window within bg.png (1484x1060 source art).
-const WINDOW_LEFT_FRAC = 0.197
+const WINDOW_LEFT_FRAC = 0.208;
 const WINDOW_RIGHT_FRAC = 0.802;
 const WINDOW_TOP_FRAC = 0.253;
 const WINDOW_BOTTOM_FRAC = 0.85;
@@ -31,7 +26,6 @@ export const CELL_HEIGHT = WINDOW_HEIGHT / VISIBLE_ROWS;
 export class SlotMachineScene {
   private reels: Reel[] = [];
   private root: Container;
-  private freeSpinOverlays: Graphics[] = [];
 
   private constructor(app: Application, background: Sprite, textures: Awaited<ReturnType<typeof loadSymbolTextures>>) {
     this.root = new Container();
@@ -42,24 +36,8 @@ export class SlotMachineScene {
     const windowTop = WINDOW_TOP_FRAC * app.screen.height;
 
     for (let i = 0; i < REEL_COUNT; i++) {
-      const reelX = windowLeft + i * (CELL_WIDTH + COLUMN_GAP);
-
-      // Tints just this reel's own column (behind its symbols, in front of bg.png) while free
-      // spins are active — see setFreeSpinOverlay. One rect per reel, same width/height/gap as
-      // the reel columns themselves, so the 3 tinted blocks sit separately with a visible gap
-      // between them instead of one solid block across all 3.
-      const overlay = new Graphics();
-      overlay.rect(0, 0, CELL_WIDTH, WINDOW_HEIGHT);
-      overlay.fill({ color: 0x1fbf5c });
-      overlay.x = reelX;
-      overlay.y = windowTop;
-      overlay.alpha = 0.4;
-      overlay.visible = false;
-      this.root.addChild(overlay);
-      this.freeSpinOverlays.push(overlay);
-
       const reelWindow = new Container();
-      reelWindow.x = reelX;
+      reelWindow.x = windowLeft + i * (CELL_WIDTH + COLUMN_GAP);
       reelWindow.y = windowTop;
 
       const mask = new Graphics();
@@ -105,16 +83,10 @@ export class SlotMachineScene {
     return new SlotMachineScene(app, bgSprite, textures);
   }
 
-  /**
-   * Spins all reels and lands on the given result. All 3 reels first lift together (nudgeUp),
-   * then start spinning at the same instant; reel 0 stops after SPIN_DURATION_MS, reel 1 stops
-   * REEL_STOP_STAGGER_MS after that, reel 2 another REEL_STOP_STAGGER_MS after that. Resolves once
-   * every reel has stopped. onReelLand fires as each individual reel stops (for a per-reel landing sound).
-   */
+  /** Spins all reels and lands on the given result. Resolves once every reel has stopped. onReelLand fires as each individual reel stops (for a per-reel landing sound). */
   async spin(reelsResult: [SlotSymbol, SlotSymbol, SlotSymbol][], onReelLand?: (index: number) => void): Promise<void> {
-    await Promise.all(this.reels.map((reel) => reel.nudgeUp()));
     const spins = this.reels.map((reel, i) =>
-      reel.spinTo(reelsResult[i], SPIN_DURATION_MS + i * REEL_STOP_STAGGER_MS, 0).then(() => onReelLand?.(i))
+      reel.spinTo(reelsResult[i], 900 + i * 350, i * 150).then(() => onReelLand?.(i))
     );
     await Promise.all(spins);
   }
@@ -122,11 +94,6 @@ export class SlotMachineScene {
   /** Glow + pulse on the payline symbols (any win) — call with false to stop, e.g. when the next spin starts. */
   setWinGlow(active: boolean): void {
     this.reels.forEach((reel) => (active ? reel.startWinGlow() : reel.stopWinGlow()));
-  }
-
-  /** Green tint behind the symbols, one block per reel — on for the whole free-spin bonus round. */
-  setFreeSpinOverlay(active: boolean): void {
-    this.freeSpinOverlays.forEach((overlay) => (overlay.visible = active));
   }
 
   destroy(): void {

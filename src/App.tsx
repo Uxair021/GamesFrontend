@@ -34,6 +34,9 @@ const AdminSizzlingRtpPage = lazy(() =>
 const AdminLifeOfLuxuryRtpPage = lazy(() =>
   import("./admin/AdminLifeOfLuxuryRtpPage").then((m) => ({ default: m.AdminLifeOfLuxuryRtpPage }))
 );
+const AdminShamrockRtpPage = lazy(() =>
+  import("./admin/AdminShamrockRtpPage").then((m) => ({ default: m.AdminShamrockRtpPage }))
+);
 const AdminLiveFeedPage = lazy(() =>
   import("./admin/AdminLiveFeedPage").then((m) => ({ default: m.AdminLiveFeedPage }))
 );
@@ -186,6 +189,14 @@ function AppShell() {
               element={
                 <Suspense fallback={<AdminFallback />}>
                   <AdminLifeOfLuxuryRtpPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="shamrock-rtp"
+              element={
+                <Suspense fallback={<AdminFallback />}>
+                  <AdminShamrockRtpPage />
                 </Suspense>
               }
             />

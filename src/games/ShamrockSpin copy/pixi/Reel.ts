@@ -4,10 +4,6 @@ import { SlotSymbol } from "../api";
 const FILLER_COUNT = 18;
 const SYMBOL_PADDING = 6;
 const GLOW_PULSE_PERIOD_MS = 520;
-/** Pre-spin anticipation: reel lifts this fraction of one cell's height before the main spin
- * starts — a quick "wind up" in the same direction the reel is about to spin. */
-const NUDGE_FRACTION = 0.05;
-const NUDGE_DURATION_MS = 130;
 
 export class Reel {
   public readonly container: Container;
@@ -72,34 +68,6 @@ export class Reel {
     this.cellCount = 0;
     this.container.y = 0;
     this.visibleCells = this.appendCells(target);
-  }
-
-  /**
-   * Quick pre-spin lift — nudges the reel up by NUDGE_FRACTION of one cell height. Meant to be
-   * called on all reels together (via Promise.all) right before spinTo, so every reel visibly
-   * "winds up" in sync before the spin itself starts.
-   */
-  nudgeUp(): Promise<void> {
-    const startY = this.container.y;
-    const targetY = startY - this.cellHeight * NUDGE_FRACTION;
-
-    return new Promise((resolve) => {
-      let rafId = 0;
-      const start = performance.now();
-      const tick = (now: number) => {
-        const t = Math.min(Math.max((now - start) / NUDGE_DURATION_MS, 0), 1);
-        const eased = 1 - Math.pow(1 - t, 2);
-        this.container.y = startY + (targetY - startY) * eased;
-        if (t < 1) {
-          rafId = requestAnimationFrame(tick);
-        } else {
-          this.container.y = targetY;
-          resolve();
-        }
-      };
-      rafId = requestAnimationFrame(tick);
-      this.pendingFrames.push(() => cancelAnimationFrame(rafId));
-    });
   }
 
   /**

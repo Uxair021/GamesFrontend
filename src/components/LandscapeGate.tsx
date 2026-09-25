@@ -89,6 +89,16 @@ function OrientationApiGate({ children }: { children: ReactNode }) {
  * from the accelerometer (useDeviceTilt) instead, which works regardless of the OS's auto-rotate
  * setting, and CSS-rotates the game itself to match. The player never has to open any OS setting:
  * open the game in portrait, tap once to allow motion access, then just turn the phone sideways.
+ *
+ * Once tilt has read landscape *once*, `children` stays mounted for good — later portrait
+ * readings only toggle a prompt overlay on top of it, never unmount it again. Real handheld
+ * tilt is noisy enough that, even with useDeviceTilt's own hysteresis/debounce, an unmount-and-
+ * remount-on-every-dip design would repeatedly tear down and rebuild the whole game (its PixiJS
+ * app, WebGL context, in-flight asset loading) — mobile Safari has a real, low ceiling on
+ * concurrent WebGL contexts, and cycling through it fast enough starts failing new context
+ * creation silently, which is what used to show up as a permanently stuck "Loading..." screen on
+ * real iPhones after rotating a few times. Mounting once and only ever overlaying afterward
+ * removes that failure mode structurally instead of just making it rarer.
  */
 function SensorRotateGate({ children }: { children: ReactNode }) {
   const { supported, permission, tilt, requestAccess } = useDeviceTilt();
@@ -96,7 +106,20 @@ function SensorRotateGate({ children }: { children: ReactNode }) {
 
   const isLandscape = tilt === "landscape-left" || tilt === "landscape-right";
 
-  if (permission === "granted" && isLandscape) {
+  // Remembers the last real landscape reading (direction + size) even after tilt drops back to
+  // portrait, so the mounted game keeps a valid rotation/size to render at underneath the prompt
+  // overlay instead of needing to unmount for lack of one. `everLandscape` is the actual "have we
+  // mounted children yet" switch — set once, never reset, which is the whole point of this fix.
+  const [everLandscape, setEverLandscape] = useState(false);
+  const [lastLandscapeTilt, setLastLandscapeTilt] = useState<"landscape-left" | "landscape-right" | null>(null);
+  useEffect(() => {
+    if (isLandscape) {
+      setEverLandscape(true);
+      setLastLandscapeTilt(tilt as "landscape-left" | "landscape-right");
+    }
+  }, [isLandscape, tilt]);
+
+  if (everLandscape && lastLandscapeTilt) {
     // The wrapper's own box is the SWAPPED window size (so after a 90deg rotation its visual
     // footprint exactly matches the real, portrait-shaped screen), centered and rotated around
     // its own middle — that works for any window size with no separate top/left offset math.
@@ -104,7 +127,7 @@ function SensorRotateGate({ children }: { children: ReactNode }) {
     // player physically turned the phone, so content lands right-side-up either way (see
     // useDeviceTilt's classify() doc comment on the one part of this that needs a real-device
     // sign check).
-    const rotation = tilt === "landscape-right" ? -90 : 90;
+    const rotation = lastLandscapeTilt === "landscape-right" ? -90 : 90;
     const rotatedSize = { width: windowSize.height, height: windowSize.width };
 
     return (
@@ -119,6 +142,15 @@ function SensorRotateGate({ children }: { children: ReactNode }) {
         >
           <RotatedViewportContext.Provider value={rotatedSize}>{children}</RotatedViewportContext.Provider>
         </div>
+        {!isLandscape && (
+          <PromptShell>
+            <RotateIcon />
+            <div>
+              <p className="text-lg font-bold">Rotate your device</p>
+              <p className="mt-1.5 text-sm text-slate-400">Turn your device sideways to play.</p>
+            </div>
+          </PromptShell>
+        )}
       </div>
     );
   }

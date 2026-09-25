@@ -16,6 +16,15 @@ type GatedDeviceOrientationEvent = typeof DeviceOrientationEvent & {
  * couple of degrees from micro hand movement. */
 const ENTER_LANDSCAPE_GAMMA = 50;
 const EXIT_LANDSCAPE_GAMMA = 35;
+/** A momentary single-sample crossing (even past the hysteresis gap above) isn't enough on its
+ * own to commit to a new classification — the reading has to hold steady past the threshold for
+ * this long first. Catches brief single-frame spikes/dips from natural hand wobble that the
+ * gamma-magnitude hysteresis alone doesn't fully filter out, on top of it rather than instead of
+ * it (see classify's doc comment on why both matter — this one specifically exists because
+ * LandscapeGate's SensorRotateGate keeps the game mounted permanently, but still visually swaps
+ * to the rotate-prompt overlay on every "portrait" reading — this debounce is what keeps that
+ * overlay from flashing in and out during ordinary handheld micro-movement). */
+const TILT_DEBOUNCE_MS = 600;
 
 function classify(gamma: number, previous: TiltOrientation | null): TiltOrientation {
   const threshold = previous === "portrait" || previous === null ? ENTER_LANDSCAPE_GAMMA : EXIT_LANDSCAPE_GAMMA;
@@ -64,6 +73,10 @@ export function useDeviceTilt(): DeviceTiltResult {
   );
   const [tilt, setTilt] = useState<TiltOrientation | null>(null);
   const tiltRef = useRef<TiltOrientation | null>(null);
+  /** A candidate classification that differs from the current committed `tilt`, and when it was
+   * first seen — only promoted to the real `tilt` once it's held for TILT_DEBOUNCE_MS straight
+   * (reset back to null the moment a reading disagrees with it again). */
+  const pendingRef = useRef<{ value: TiltOrientation; since: number } | null>(null);
 
   useEffect(() => {
     if (permission !== "granted") return;
@@ -71,9 +84,21 @@ export function useDeviceTilt(): DeviceTiltResult {
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma === null) return;
       const next = classify(e.gamma, tiltRef.current);
-      if (next !== tiltRef.current) {
+
+      if (next === tiltRef.current) {
+        pendingRef.current = null;
+        return;
+      }
+
+      const now = performance.now();
+      if (pendingRef.current?.value !== next) {
+        pendingRef.current = { value: next, since: now };
+        return;
+      }
+      if (now - pendingRef.current.since >= TILT_DEBOUNCE_MS) {
         tiltRef.current = next;
         setTilt(next);
+        pendingRef.current = null;
       }
     };
 

@@ -378,12 +378,14 @@ function inputClass(invalid = false): string {
   }`;
 }
 
-// Buffalo777, Sizzling 7s, and Life of Luxury all run fully client-side now (no backend paytable
-// document to fetch/save — see their own dedicated AdminBuffaloRtpPage/AdminSizzlingRtpPage/
-// AdminLifeOfLuxuryRtpPage, which read and write localStorage instead), so this page — which only
-// knows how to talk to the backend paytable service — would 404/500 on any of them. Excluded here
-// rather than left to be discovered by a broken tab click.
-const OFFLINE_GAME_SLUGS = new Set(["buffalo-777", "sizzling-7s", "life-of-luxury"]);
+// Buffalo777, Sizzling 7s, Life of Luxury, and Shamrock Spin all run fully client-side now (no
+// backend paytable document to fetch/save — see their own dedicated AdminBuffaloRtpPage/
+// AdminSizzlingRtpPage/AdminLifeOfLuxuryRtpPage/AdminShamrockRtpPage, which read and write
+// localStorage instead), so this page — which only knows how to talk to the backend paytable
+// service — would 404/500 on any of them. Excluded here rather than left to be discovered by a
+// broken tab click. (Crystal Clover still uses this page's own ruleTierMap/celebrationMap/
+// freeSpinsGranted JSX blocks below — those stay generic/shared, not deleted.)
+const OFFLINE_GAME_SLUGS = new Set(["buffalo-777", "sizzling-7s", "life-of-luxury", "shamrock-spin"]);
 const RTP_CONTROLLED_GAMES = gameRegistry.filter((g) => !OFFLINE_GAME_SLUGS.has(g.slug));
 
 export function AdminRtpPage() {

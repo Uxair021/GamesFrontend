@@ -35,7 +35,7 @@ const SCATTER_BOX_COLOR = 0xffd700;
 /** Border width and connecting-bridge width are equal on purpose — a winning cell's border and
  * the bridge to its neighbor must read as one unbroken colored shape, not a thin line cutting
  * across the symbol art plus a separately-sized box. */
-const WIN_BORDER_WIDTH = 10;
+const WIN_BORDER_WIDTH = 11;
 /** Thinner/more transparent than a win border — this is a reference overlay ("here's where
  * line N runs"), not a "you won" indicator, so it should read as quieter. */
 const ALL_LINES_WIDTH = 8;

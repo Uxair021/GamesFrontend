@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { getGameBySlug } from "../games/registry";
 import { resumeAudio } from "../games/shared/sound/soundEngine";
@@ -15,6 +15,31 @@ export function GamePage() {
   const { slug } = useParams();
   const game = slug ? getGameBySlug(slug) : undefined;
   const pageRef = useRef<HTMLDivElement>(null);
+  const [contextLost, setContextLost] = useState(false);
+
+  /**
+   * Safety net for WebGL context loss — normally rare, but a real risk on mobile Safari
+   * specifically, which has a low ceiling on concurrent WebGL contexts (and, before
+   * LandscapeGate's SensorRotateGate was fixed to keep the game mounted across tilt changes
+   * instead of tearing it down and rebuilding it on every rotation wobble, was the actual cause
+   * of a real bug: repeated context creation on iPhone exhausting that ceiling and leaving
+   * nothing to recover from — the game just sat on its loading screen forever). This is a
+   * general backstop, not specific to that bug — any other cause of context loss (backgrounding,
+   * OS memory pressure, a different mobile browser's own limits) would previously hit the exact
+   * same silent, unrecoverable dead end. `webglcontextlost` bubbles, so one listener up here
+   * catches it regardless of which game/canvas underneath it fires it.
+   */
+  useEffect(() => {
+    setContextLost(false);
+    const node = pageRef.current;
+    if (!node) return;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      setContextLost(true);
+    };
+    node.addEventListener("webglcontextlost", handleContextLost);
+    return () => node.removeEventListener("webglcontextlost", handleContextLost);
+  }, [slug]);
 
   /**
    * Every game opens in fullscreen, covering the loading screen through gameplay, on any
@@ -86,6 +111,19 @@ export function GamePage() {
       <Suspense fallback={<div className="text-center text-white/70">Loading game...</div>}>
         <GameComponent />
       </Suspense>
+      {contextLost && (
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-4 bg-slate-950 px-10 text-center text-slate-100">
+          <p className="text-lg font-bold">Something went wrong</p>
+          <p className="text-sm text-slate-400">The game's graphics ran into a problem and couldn't continue.</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-full bg-gradient-to-b from-amber-400 to-amber-500 px-6 py-2.5 text-sm font-semibold text-slate-950 hover:brightness-110"
+          >
+            Tap to reload
+          </button>
+        </div>
+      )}
     </div>
   );
 }

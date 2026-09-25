@@ -37,9 +37,9 @@ const WIN_LINE_HOLD_MS = 1280;
 /** Decorative payline dots strung along both sides of the reel frame — one color per line,
  * also used to color that line's win overlay drawn in Pixi (see LifeOfLuxuryScene.
  * buildWinGroups/drawActiveGroup) so a lit line's HTML dot and its on-grid line always match. */
-const LINE_DOT_COLORS = [
-  "#ef4444", "#3b82f6", "#eab308", "#22c55e", "#166534", "#dc2626", "#1d4ed8", "#a21caf",
-  "#f97316", "#0d9488", "#7c3aed", "#06b6d4", "#ec4899", "#4338ca", "#84cc16",
+ const LINE_DOT_COLORS = [
+  "#FF2424", "#0062FF", "#FFC71E", "#00EF58", "#008734", "#A60000", "#002791", "#A21CAF",
+  "#FF6A00", "#03FFEA", "#5905E9", "#00D9FF", "#FF0080", "#1500FF", "#99FF00",
 ];
 /** The 15 fixed payline patterns — mirrors backEnd/src/games/LifeOfLuxury/config.ts's PAYLINES
  * exactly (row index 0=top/1=mid/2=bottom per reel). Used both for the "show all paylines"
